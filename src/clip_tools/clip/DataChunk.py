@@ -88,7 +88,6 @@ class BlockDatas(list):
                 unknown_var2 = read_fmt(">i", fp)[0] # Looks like the block count a second time
 
                 assert block_count == len(blocks)
-                print(unknown_var2)
 
                 for i in range(block_count):
                     blocks.block_status.append(read_fmt(">i", fp)[0])  
