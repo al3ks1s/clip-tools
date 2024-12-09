@@ -1,5 +1,6 @@
 from clip_tools.utils import read_fmt
 from clip_tools.clip.Database import Database
+import io 
 
 class BlockData:
     begin_chunk_signature: str = 'BlockDataBeginChunk'.encode('UTF-16BE')
@@ -64,7 +65,7 @@ class BlockDatas(list):
         has_next_block = True
         blocks = BlockDatas()
 
-        while has_next_block:
+        while fp.tell() < fp.getbuffer().nbytes:
 
             block_data_size = read_fmt(">i", fp)[0]
 
@@ -106,7 +107,7 @@ class BlockDatas(list):
                 
                 has_next_block = False
             else:
-                pass
+                pass                
 
         return blocks
 
@@ -129,7 +130,9 @@ class DataChunk:
     @classmethod
     def read(cls, fp):
         
+
         external_chunk_size = read_fmt(">q", fp)[0]
+        
         external_chunk_id_length = read_fmt(">q", fp)[0]
 
         external_chunk_id = fp.read(external_chunk_id_length)
@@ -137,8 +140,10 @@ class DataChunk:
         external_chunk_size_2 = read_fmt(">q", fp)[0]
 
         assert external_chunk_size == external_chunk_size_2 + external_chunk_id_length + 16
+    
+        block_raw = io.BytesIO(fp.read(external_chunk_size_2))
 
-        block_datas = BlockDatas.read(fp)        
+        block_datas = BlockDatas.read(block_raw)        
 
         return cls(external_chunk_size, external_chunk_id, block_datas)
 
