@@ -21,6 +21,12 @@ class Layer:
 
             if layer_info.TextLayerType is not None:
                 return TextLayer(clip_file, layer_info)
+            if layer_info.VectorNormalType == 0:
+                return VectorLayer(clip_file, layer_info)
+            elif layer_info.VectorNormalType == 2:
+                return StreamLineLayer(clip_file, layer_info)
+            elif layer_info.VectorNormalType == 3:
+                return FrameLayer(clip_file, layer_info)
 
             return Folder(clip_file, layer_info)
         elif layer_info.LayerType == 1:
@@ -35,6 +41,43 @@ class Layer:
             return Layer(clip_file, layer_info)
 
 
+    @property
+    def layer_name(self):
+
+        return self.layer_info.layer_name
+
+    @layer_name.setter
+    def layer_name(self, layer_name):
+
+        self.layer_info.layer_name = layer_name
+
+
+    def get_render_mipmap(self):
+
+        if self.layer_info.LayerRenderMipmap == 0:
+            return None
+
+        render_mipmap = self.clip_file.sql_database.fetch_values("Mipmap")[self.layer_info.LayerRenderMipmap]
+
+        return render_mipmap
+
+    def get_mask_render_mipmap(self):
+
+        if self.layer_info.LayerLayerMaskMipmap == 0:
+            return None
+
+        mask_render_mipmap = self.clip_file.sql_database.fetch_values("Mipmap")[self.layer_info.LayerLayerMaskMipmap]
+    
+        return mask_render_mipmap
+
+    def get_render_offscreen(self, mipmap):
+        
+        mipmapsinfo = self.clip_file.sql_database.fetch_values("MipmapInfo")[mipmap.BaseMipmapInfo]
+
+        offscreen = self.clip_file.sql_database.fetch_values("Offscreen")[mipmapsinfo.Offscreen]
+
+        return offscreen
+
     def _get_mip_attributes(self):
         
         mipmaps = self.clip_file.sql_database.fetch_values("Mipmap")
@@ -46,10 +89,10 @@ class Layer:
         relevant_offscreen = offscreen[mipmapsinfos[mipbase].Offscreen]
 
         chunk = self.clip_file.data_chunks[relevant_offscreen.BlockData]
-        mip_attr = self._parse_mipmap_attribute(relevant_offscreen.Attribute)
+        mip_attr = self._parse_offscreen_attribute(relevant_offscreen.Attribute)
         return chunk, mip_attr
 
-    def _parse_mipmap_attribute(self, offscreen_attribute):
+    def _parse_offscreen_attribute(self, offscreen_attribute):
 
         columns = ["header_size", "info_section_size", "extra_info_section_size", "u1", "bitmap_width", "bitmap_height", "block_grid_width", "block_grid_height", "pixel_packing_attributes", "u2", "default_fill_color", "u3", "u4", "u5", "u6", "block_count", "u7", "block_sizes"]
 
@@ -111,8 +154,6 @@ class Layer:
 
             return c_d.get(c_num)
 
-        print(mip_attributes.pixel_packing_attributes)
-
         c_count1 = mip_attributes.pixel_packing_attributes[1]
         c_count2 = mip_attributes.pixel_packing_attributes[2]
         c_count3 = mip_attributes.pixel_packing_attributes[3]
@@ -166,7 +207,12 @@ class Folder(Layer, FolderMixin):
 
 class PixelLayer(Layer):
 
-    pass
+    def topil(self):
+        pass
+
+    def frompil(self):
+        pass
+
 
 class TextLayer(Layer):
 
@@ -186,7 +232,9 @@ class VectorLayer(Layer):
     # A vector layer has a LayerType of 0
     # 
 
-    # Vector layer has External chunk but not in a bitmap block list format, need to find what it looks like
+    # Vector layer has External chunk but not in a bitmap block list format, referenced in the VectorObjectList
+    # Seems to be an Adobe Photoshop Color swatch data, probably has other data following
+    # Vector Normal Type : 0
 
     pass
 
@@ -209,11 +257,24 @@ class GradientLayer(Layer):
 
     pass
 
-class FrameLayer(Folder):
+class FrameLayer(VectorLayer):
     
     # Frame Border Layer, Typelayer : 0
-    # Special folder
+    # Special vector folder
+
+    # VectorNormalType: 3
+
     
+    pass
+
+class StreamLineLayer(VectorLayer):
+    
+    # Defines speedlines layers, LayerType : 0
+    # Definition data in StreamLine table, index in the StreamLineIndex column
+    # Has vectorized external data, seems to be an Adobe Photoshop Color swatch data
+    
+    # VectorNormalType: 2
+
     pass
 
 class TDLayer(Layer):
@@ -222,6 +283,8 @@ class TDLayer(Layer):
     # Specific data starts at Manager3DOd
     # LayerObject table holds the additional light/camera data for the 3D layers
     # 3D Scene data in Manager3DOd table
-    # Has external data
+    # Has external data, Data starts by the signature "_STUDIO_3D_DATA2"
     
+    # Additional metadata in SpecialRulerManager, RulerVanishPoint, RulerPerspective, 
+
     pass

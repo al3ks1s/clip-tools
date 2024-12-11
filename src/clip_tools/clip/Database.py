@@ -1,5 +1,6 @@
 import sqlite3
 import tempfile
+import importlib
 
 from collections import namedtuple
 
@@ -25,9 +26,8 @@ class Database:
               
         self.table_scheme = {}
 
-
         for table in self._execute_query("Select * from sqlite_schema where type == 'table';"):
-            self.table_scheme[table[1]] = [x[0].removeprefix('_') for x in self._execute_query("SELECT name FROM pragma_table_info('{}')".format(table[1]))]
+            self.table_scheme[table[1]] = [x[0].removeprefix('_') for x in self._execute_query(f"SELECT name FROM pragma_table_info('{table[1]}')")]
 
         param_scheme = self._execute_query("Select * from paramScheme;")
         self.param_scheme = {}
@@ -47,25 +47,37 @@ class Database:
 
     def fetch_values(self, table):
 
+        # Do not use this to fetch metadata tables like ParamScheme, ElemScheme, etc
+        # Do not use this to fetch project information. It has a single row so no MainId.
+
         if table not in self.table_scheme:
             return None # Raise an exception?
 
-        return self.map_results(self._execute_query("Select * from {}".format(table)), table)
+        return self.map_results(self._execute_query(f"Select * from {table}"), table)
 
     def map_results(self, rows, table):
         
-        scheme = self.table_scheme[table]
-        data_type = namedtuple(table, scheme)
-
         mapped_values = {}
 
         for row in rows:
             
-            mapped_row = data_type(*row)
+            mapped_row = self.row_to_object(row, table)
             mapped_values[mapped_row.MainId] = mapped_row
 
-        # Could add a data validation step based on the param_scheme?
         return mapped_values
+
+    def row_to_object(self, row, table):
+        
+        scheme = self.table_scheme[table]
+        data_type = namedtuple(table, scheme)
+
+        _module = importlib.import_module("clip_tools.clip.ClipData")
+        _class = getattr(_module, table)
+
+        mapped_row = data_type(*row)._asdict()
+        del mapped_row["PW_ID"]
+        
+        return _class(**mapped_row)
 
     def edit_entry(self, table, value_dict):
         pass
@@ -86,3 +98,39 @@ class Database:
 
     def write(self, fp):
         pass
+
+
+    def _scheme_to_classes(self):
+        # Cursed data class writing
+        # Use only if needing to regenerate a ClipData.py
+
+        param_value_mapping = {
+            1: "int",
+            2: "float",
+            3: "str",
+            4: "bytes" 
+        }
+
+        DataString = "import attr\n\n\n"
+
+        for table in self.param_scheme:
+            
+            DataString += "@attr.define\n"
+            DataString += f"class {table}():\n"
+            
+            param_table = self.param_scheme[table]
+
+            DataString += f"    # Class with {len(param_table)} possible columns\n"
+            
+            DataString += "    MainId: int = None # The param scheme doesn't necessarily have a MainId\n"
+
+            for param in param_table:
+                DataString += f"    {param}: {param_value_mapping.get(param_table[param]["DataType"])} = None\n"
+
+            DataString += "\n\n"
+
+
+        with open("ClipData.py", "w") as f:
+            f.write(DataString)
+
+        print(DataString)

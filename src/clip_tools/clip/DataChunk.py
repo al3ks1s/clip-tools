@@ -75,7 +75,7 @@ class BlockDatas(list):
                 block_data_text_size = read_fmt(">i", fp)[0] * 2
                 signature = fp.read(block_data_text_size)
 
-            if signature == BlockData.begin_chunk_signature: 
+            if signature == BlockData.begin_chunk_signature:
 
                 fp.seek(-8 - block_data_text_size , 1)
 
@@ -91,7 +91,7 @@ class BlockDatas(list):
                 assert block_count == len(blocks)
 
                 for i in range(block_count):
-                    blocks.block_status.append(read_fmt(">i", fp)[0])  
+                    blocks.block_status.append(read_fmt(">i", fp)[0])
         
             elif signature == BlockData.checksum_chunk_signature:
 
@@ -107,7 +107,7 @@ class BlockDatas(list):
                 
                 has_next_block = False
             else:
-                pass                
+                break                
 
         return blocks
 
