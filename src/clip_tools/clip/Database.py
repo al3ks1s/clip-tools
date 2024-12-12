@@ -45,6 +45,10 @@ class Database:
 
         return self.db_cursor.fetchall()
 
+    def fetch_project_data(self):
+
+        return self.row_to_object(self._execute_query(f"Select * from Project")[0], "Project")
+
     def fetch_values(self, table):
 
         # Do not use this to fetch metadata tables like ParamScheme, ElemScheme, etc

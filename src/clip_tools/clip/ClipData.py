@@ -477,7 +477,7 @@ class VectorObjectList():
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
-    VectorData: bytes = None
+    VectorData: bytes = None # External chunk
 
 
 @attr.define
@@ -1478,6 +1478,8 @@ class Project():
     ComicStoryNombreUseEdge: int = None
     ComicStoryNombreEdgeWidth: float = None
     ComicStoryNombreEdgeUnit: int = None
+    ComicStoryXPageNombreOffset: float = None
+    ComicStoryXPageNombreOffsetUnit: int = None
     ComicStoryYPageNombreOffset: float = None
     ComicStoryYPageNombreOffsetUnit: int = None
     DefaultPageUnit: int = None
@@ -1486,6 +1488,10 @@ class Project():
     DefaultPageResolution: float = None
     DefaultPageChannelBytes: int = None
     DefaultPageChannelOrder: int = None
+    DefaultPageColorType: int = None
+    DefaultPageBlackChecked: int = None
+    DefaultPageWhiteChecked: int = None
+    DefaultPageToneLine: int = None
     DefaultPageUsePaper: int = None
     DefaultPagePaperRed: int = None
     DefaultPagePaperGreen: int = None
@@ -1532,10 +1538,9 @@ class Project():
     DefaultCoverTemplatePath: str = None
     DefaultCoverTemplatePath2: str = None
     DefaultCoverTemplateName: str = None
+    DefaultPageCelTemplateUUID: str = None
     DefaultCoverIsUserTemplate: int = None
     DefaultCoverTemplateUUID: str = None
     DefaultPageSettingType: str = None
     WebCooperationUploadUrl: str = None
     WebCooperationUploadToken: str = None
-
-
