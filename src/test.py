@@ -9,7 +9,7 @@ from PIL import Image
 import zlib
 
 #"""
-workdir = '../tests'
+workdir = '../tests/clip-tools-samples'
 
 #filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
 filelist = ["Illustration.clip"]
@@ -26,11 +26,11 @@ filelist = ["page0001.clip"]
 for f in filelist:
     with open(os.path.join(workdir, f), "rb") as fp:
         
-        clipFile = ClipStudioFile.read(fp)
+        proj = Project.open(fp)
 
-        #clipFile.sql_database._scheme_to_classes()
-        
-        keys = clipFile.sql_database.table_scheme.copy()
+        print(proj.canvas.root_folder[0])
+
+        keys = proj.clip_file.sql_database.table_scheme.copy()
         del keys["ElemScheme"]
         del keys["ParamScheme"]
         del keys["ExternalTableAndColumnName"]
@@ -40,8 +40,13 @@ for f in filelist:
         del keys["sqlite_sequence"]
 
         for k in keys:
-            clipFile.sql_database.fetch_values(k)
+            proj.clip_file.sql_database.fetch_values(k)
 
+        """
+        clipFile = ClipStudioFile.read(fp)
+
+        #clipFile.sql_database._scheme_to_classes()
+        
         layers = clipFile.sql_database.fetch_values("Layer")
                       
         for layer in layers:
@@ -52,4 +57,4 @@ for f in filelist:
                 
                 im = l.topil()
                 im.show()
-        
+        """

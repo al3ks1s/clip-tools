@@ -1,5 +1,13 @@
 import attr
 
+class ClipData():
+    
+    def write_to_db(self, db):
+        
+        # TODO: Alter the table on the go for each new not None attribute at insertion or update.
+        
+        pass
+
 
 @attr.define
 class Offscreen():
@@ -184,6 +192,7 @@ class Layer():
     EffectRangeType: int = None
     DrawToRenderOffscreenType: int = None
     DrawToMaskOffscreenType: int = None
+    OutputAttribute: int = None
     SpecialRenderType: int = None
     DrawToRenderMipmapType: int = None
     DrawToMaskMipmapType: int = None
@@ -311,6 +320,14 @@ class Layer():
     Camera2DOriginalFrameCenterY: float = None
     Camera2DApplyTransform: int = None
     LightTableInfo: bytes = None
+    DrawUpperMipmapForMonochromeIndex: int = None
+    DrawUpperMipmapForMonochromeUse: int = None
+    DrawUpperMipmapForLineIndex: int = None
+    DrawUpperMipmapForLineFlag: int = None
+    DrawUpperMipmapForEdgeIndex: int = None
+    DrawUpperMipmapForEdgeFlag: int = None
+    DrawUpperMipmapForToneIndex: int = None
+    DrawUpperMipmapForToneFlag: int = None
 
 
 @attr.define

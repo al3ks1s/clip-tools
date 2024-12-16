@@ -5,8 +5,20 @@ from clip_tools.clip.ClipData import Layer
 import io
 import zlib
 
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Iterator,
+    Protocol,
+    TypeVar,
+    runtime_checkable,
+)
+
 from PIL import Image
 from collections import namedtuple
+
+
 
 # Abstract
 class BaseLayer():
@@ -15,13 +27,14 @@ class BaseLayer():
         self.clip_file = clip_file
         self._data = layer_data
 
+        self._parent = None
+
         self.mipmaps = []
         self.mask_mipmap = []
 
     @classmethod
-    def new(cls, clip_file, layer_data):
-        
-
+    def from_db(cls, clip_file, layer_data):
+        # Need to make a better one
         if layer_data.LayerType == 0:
 
             if layer_data.TextLayerType is not None:
@@ -42,20 +55,42 @@ class BaseLayer():
             return RootFolder(clip_file, layer_data)
         elif layer_data.LayerType == 4098:
             return CorrectionLayer(clip_file, layer_data)
-        else: 
+        elif layer_data.LayerType == 1584:
+            return PaperLayer(clip_file, layer_data)
+        else:
             return BaseLayer(clip_file, layer_data)
-
 
     @property
     def LayerName(self):
-
         return self._data.LayerName
 
     @LayerName.setter
     def layer_name(self, layer_name):
-
         self._data.layer_name = layer_name
 
+    @property
+    def lock(self):
+        return self._data.LayerLock
+
+    @lock.setter
+    def lock(self, lock_mask):
+        self._data.LayerLock = lock_mask
+
+    @property
+    def opacity(self):
+        return int(self._data.LayerOpacity / 256) * 100
+
+    @opacity.setter
+    def opacity(self, new_opacity):
+        self._data.LayerOpacity = int(new_opacity / 100) * 256
+
+    @property
+    def blend_mode(self):
+        return self._data.LayerComposite # See constants.LayerComposite
+
+    @blend_mode.setter
+    def blend_mode(self, new_mode):
+        self._data.LayerComposite = new_mode # From constants.LayerComposite
 
     def _get_render_mipmap(self):
 
@@ -189,6 +224,235 @@ class BaseLayer():
 
         return im
 
+    @property
+    def firstChildIndex(self):
+        return self._data.LayerFirstChildIndex
+
+    @property
+    def nextLayerIndex(self):
+        return self._data.LayerNextIndex    
+
+    def delete_layer(self):
+        """
+        Deletes the layer and all its child layers if the layer is a group from its parent (group or psdimage).
+        """
+
+        if self._parent is not None and isinstance(self._parent, FolderMixin):
+            if self in self._parent:
+                self._parent.remove(self)
+            self._parent._update_psd_record()
+        else:
+            pass
+
+        return self
+
+    def move_to_group(self, group: "GroupMixin"):
+        """
+        Moves the layer to the given group, updates the tree metadata as needed.
+
+        :param group: The group the current layer will be moved into.
+        """
+
+        assert isinstance(group, FolderMixin)
+        assert group is not self
+
+        if isinstance(self, FolderMixin):
+            assert (
+                group not in self.descendants()
+            ), "Cannot move group {} into its descendant {}".format(self, group)
+
+        if self._parent is not None and isinstance(self._parent, FolderMixin):
+            if self in self._parent:
+                self._parent.remove(self)
+
+        group.append(self)
+
+        return self
+
+
+class FolderMixin():
+    _layers: list[BaseLayer]
+
+    def __len__(self) -> int:
+        return self._layers.__len__()
+
+    def __iter__(self):
+        return self._layers.__iter__()
+
+    def __getitem__(self, key) -> BaseLayer:
+        return self._layers.__getitem__(key)
+
+    def __setitem__(self, key, value) -> None:
+        self._check_valid_layers(value)
+        self._layers.__setitem__(key, value)
+        self._update_metadata()        
+
+    def __delitem__(self, key) -> None:
+        self._layers.__delitem__(key)
+        self._update_metadata()
+
+    def append(self, layer: BaseLayer) -> None:
+        """
+        Add a layer to the end (top) of the group
+
+        :param layer: The layer to add
+        """
+        self._check_valid_layers(layer)
+        self.extend([layer])
+
+    def extend(self, layers) -> None:
+        """
+        Add a list of layers to the end (top) of the group
+
+        :param layers: The layers to add
+        """
+
+        self._check_valid_layers(layers)
+        self._layers.extend(layers)
+        self._update_metadata()
+
+    def insert(self, index: int, layer: BaseLayer) -> None:
+        """
+        Insert the given layer at the specified index.
+
+        :param index:
+        :param layer:
+        """
+
+        self._check_valid_layers(layer)
+        self._layers.insert(index, layer)
+        self._update_metadata()
+        
+    def remove(self, layer: BaseLayer):
+        """
+        Removes the specified layer from the group
+
+        :param layer:
+        """
+
+        self._layers.remove(layer)
+        self._update_metadata()
+        return self
+
+    def pop(self, index: int = -1) -> BaseLayer:
+        """
+        Removes the specified layer from the list and returns it.
+
+        :param index:
+        """
+
+        popLayer = self._layers.pop(index)
+        self._update_metadata()
+        return popLayer
+
+    def clear(self) -> None:
+        """
+        Clears the group.
+        """
+
+        self._layers.clear()
+        self._update_metadata()
+
+    def index(self, layer: BaseLayer) -> int:
+        """
+        Returns the index of the specified layer in the group.
+
+        :param layer:
+        """
+
+        return self._layers.index(layer)
+
+    def count(self, layer: BaseLayer) -> int:
+        """
+        Counts the number of occurences of a layer in the group.
+
+        :param layer:
+        """
+
+        return self._layers.count(layer)
+    
+    def _check_valid_layers(self, layers: BaseLayer | Iterable[BaseLayer]) -> None:
+
+        return
+
+        assert layers is not self, "Cannot add the group {} to itself.".format(self)
+
+        if isinstance(layers, BaseLayer):
+            layers = [layers]
+
+        for layer in layers:
+            assert isinstance(layer, BaseLayer)
+            if isinstance(layer, FolderMixin):
+                assert (
+                    self not in list(layer.descendants())
+                ), "This operation would create a reference loop within the group between {} and {}.".format(
+                    self, layer
+                )
+
+    def _update_metadata(self):
+        
+        for layer in self._layers:
+            layer._parent = self
+
+    def descendants(self) -> Iterator[BaseLayer]:
+        """
+        Return a generator to iterate over all descendant layers.
+
+        Example::
+
+            # Iterate over all layers
+            for layer in psd.descendants():
+                print(layer)
+
+            # Iterate over all layers in reverse order
+            for layer in reversed(list(psd.descendants())):
+                print(layer)
+
+        """
+        for layer in self:
+            yield layer
+            if isinstance(layer, FolderMixin):
+                for child in layer.descendants():
+                    yield child
+
+    def find(self, name: str) -> BaseLayer | None:
+        """
+        Returns the first layer found for the given layer name
+
+        :param name:
+        """
+
+        for layer in self.findall(name):
+            return layer
+        return None
+
+    def findall(self, name: str) -> Iterator[BaseLayer]:
+        """
+        Return a generator to iterate over all layers with the given name.
+
+        :param name:
+        """
+
+        for layer in self.descendants():
+            if layer.name == name:
+                yield layer
+
+class Folder(FolderMixin, BaseLayer):
+
+    # Is a folder if LayerFolder column is 1
+
+    def __init__(self, clip_file, layer_data):
+
+        self._layers = []
+
+        BaseLayer.__init__(self, clip_file, layer_data)
+
+
+class RootFolder(Folder):
+    pass
+
+class PixelLayer(BaseLayer):
+
     def topil(self):
 
         if self._get_render_offscreen(self._get_render_mipmap()).BlockData not in self.clip_file.data_chunks.keys():
@@ -200,26 +464,20 @@ class BaseLayer():
 
         return self._decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
 
-    def save_to_db(self):
 
-        # Need to write a function to write to the db and alter the db without writing all the null junk
-
-        pass
-
-class FolderMixin:
+class PaperLayer(BaseLayer):
     pass
 
+class TextLayer(BaseLayer):
 
-class Folder(BaseLayer, FolderMixin):
+    # A text layer has a LayerType of 0
+    # The text layer info is in the TextLayer* columns
+    # TextLayerType not None
+    # TextLayerString - The text
+    # TextLayerAttributes - This is the paragraph data information
+    # Etc
 
-    # Is a folder if LayerFolder column is 1
-
-    pass
-
-class RootFolder(Folder):
-    pass
-
-class PixelLayer(BaseLayer):
+    # Text layers have no External chunk
 
     @property
     def text(self):
@@ -249,19 +507,9 @@ class PixelLayer(BaseLayer):
     def color(self):
         pass
 
-
-class TextLayer(BaseLayer):
-
-    # A text layer has a LayerType of 0
-    # The text layer info is in the TextLayer* columns
-    # TextLayerType not None
-    # TextLayerString - The text
-    # TextLayerAttributes - This is the paragraph data information
-    # Etc
-
-    # Text layers have no External chunk
-
-    pass
+    def _parse_text_attribute(self):
+        
+        return None
 
 class CorrectionLayer(BaseLayer):
 
@@ -269,7 +517,7 @@ class CorrectionLayer(BaseLayer):
     # Correction metadata in FilterLayerInfo in the DB
     # First int is the layer type, second the length, then all the correction data 
 
-    # Correction BaseLayer has no external data
+    # Correction Layer has no external data
 
     pass
 
@@ -296,17 +544,21 @@ class VectorLayer(BaseLayer):
     pass
 
 
-class FrameLayer(VectorLayer):
+class FrameLayer(Folder, VectorLayer):
     
     # Frame Border BaseLayer, Typelayer : 0
     # Special vector folder
 
     # VectorNormalType: 3
 
-    
-    pass
+    def __init__(self, clip_file, layer_data):
 
-class StreamLineLayer(VectorLayer):
+        self._layers = []
+
+        VectorLayer.__init__(self, clip_file, layer_data)
+    
+
+class StreamLineLayer(Folder, VectorLayer):
     
     # Defines speedlines layers, LayerType : 0
     # Definition data in StreamLine table, index in the StreamLineIndex column

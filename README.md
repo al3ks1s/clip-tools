@@ -1,12 +1,18 @@
 # clip-tools
 
-Package for working with Clip Studio Paint .clip and .cmc files. Currently work in progress.
+A pyhton API for working with Clip Studio Paint .clip and .cmc files. Currently work in progress.
 
 ## Features
 
+
+
 ## Installation
 
+TODO
+
 ## Usage
+
+TODO  
 
 ## Acknowledgments 
 

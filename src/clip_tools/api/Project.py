@@ -1,12 +1,16 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
+from clip_tools.api.Canvas import Canvas
 
 class Project():
     
     def __init__(self, clip_file, data):
         self.clip_file = clip_file
-        self.canvas = []
         self._data = data
 
+        canvas_data = self.clip_file.sql_database.fetch_values("Canvas")[1]
+
+        self.canvas = Canvas(clip_file, canvas_data)
+    
     @classmethod
     def open(cls, fp):
         

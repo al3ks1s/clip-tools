@@ -38,7 +38,13 @@ class Database:
                 self.param_scheme[row[1]] = {}
             
             self.param_scheme[row[1]][row[2]] = { k:v for k,v in zip(self.table_scheme["ParamScheme"][3:], row[3:]) }
-            
+
+    def init_db(self):
+        
+        
+        
+        pass
+
     def _execute_query(self, query):
 
         self.db_cursor.execute(query)
