@@ -2,15 +2,15 @@
 
 A pyhton API for working with Clip Studio Paint .clip and .cmc files. Currently work in progress.
 
-## Features
-
+## Features
 
 
 ## Installation
 
 TODO
 
-## Usage
+
+## Usage
 
 TODO  
 
