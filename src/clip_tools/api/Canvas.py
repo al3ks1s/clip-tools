@@ -37,14 +37,12 @@ class Canvas():
 
     def _init_structure(self):
         
-        layers = self.clip_file.sql_database.fetch_values("Layer")
+        layers = self.clip_file.sql_database.get_table("Layer")
 
         root_data = layers[self.canvas_data.CanvasRootFolder]
         self.root_folder = BaseLayer.from_db(self.clip_file, root_data)
 
         self._recurse_structure(self.clip_file, layers, self.root_folder)
-
-        print(self.root_folder[:])
 
     def _recurse_structure(self, clip_file, layers, current_layer):
 
@@ -61,3 +59,8 @@ class Canvas():
 
             current_layer._parent.append(next_layer)
             self._recurse_structure(clip_file, layers, next_layer)
+
+    def __repr__(self):
+        return "Canvas(size=%dx%d, dpi=%s)" % (int(self.width),
+            int(self.height),
+            int(self.resolution))

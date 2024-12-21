@@ -1,0 +1,1 @@
+# LayerEffectAttaced / LayerEffectInfo column.

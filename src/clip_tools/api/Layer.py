@@ -1,9 +1,12 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
 from clip_tools.utils import read_fmt
 from clip_tools.clip.ClipData import Layer
+from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder
+from clip_tools.parsers import *
 
 import io
 import zlib
+import logging 
 
 from typing import (
     Any,
@@ -18,9 +21,8 @@ from typing import (
 from PIL import Image
 from collections import namedtuple
 
+logger = logging.getLogger(__name__)
 
-
-# Abstract
 class BaseLayer():
 
     def __init__(self, clip_file, layer_data):
@@ -29,43 +31,72 @@ class BaseLayer():
 
         self._parent = None
 
-        self.mipmaps = []
-        self.mask_mipmap = []
+        self.mipmaps = self.clip_file.sql_database.get_referenced_items("Mipmap", "LayerId", self._data.MainId)
+        self.mipmap_infos = self.clip_file.sql_database.get_referenced_items("MipmapInfo", "LayerId", self._data.MainId)
+        self.offscreens = self.clip_file.sql_database.get_referenced_items("Offscreen", "LayerId", self._data.MainId)
 
     @classmethod
     def from_db(cls, clip_file, layer_data):
-        # Need to make a better one
-        if layer_data.LayerType == 0:
 
-            if layer_data.TextLayerType is not None:
-                return TextLayer(clip_file, layer_data)
-            if layer_data.VectorNormalType == 0:
-                return VectorLayer(clip_file, layer_data)
-            elif layer_data.VectorNormalType == 2:
-                return StreamLineLayer(clip_file, layer_data)
-            elif layer_data.VectorNormalType == 3:
-                return FrameLayer(clip_file, layer_data)
-
-            return Folder(clip_file, layer_data)
-        elif layer_data.LayerType == 1:
-            return PixelLayer(clip_file, layer_data)
-        elif layer_data.LayerType == 2:
-            return GradientLayer(clip_file, layer_data)
-        elif layer_data.LayerType == 256:
+        if layer_data.LayerType & LayerType.ROOT_FOLDER:
             return RootFolder(clip_file, layer_data)
-        elif layer_data.LayerType == 4098:
-            return CorrectionLayer(clip_file, layer_data)
-        elif layer_data.LayerType == 1584:
+
+        if layer_data.LayerType == LayerType.PAPER: # Paper is a combination of flags but can't determine yet what specifically defines a paper layer
             return PaperLayer(clip_file, layer_data)
-        else:
-            return BaseLayer(clip_file, layer_data)
+
+        if layer_data.LayerType & LayerType.PIXEL:
+            return PixelLayer(clip_file, layer_data)
+
+        if layer_data.LayerType & LayerType.CORRECTION:
+            return CorrectionLayer(clip_file, layer_data)
+
+        if layer_data.VectorNormalType == 0:
+            return VectorLayer(clip_file, layer_data)
+
+        if layer_data.VectorNormalType == 2:
+            return StreamLineLayer(clip_file, layer_data)
+
+        if layer_data.VectorNormalType == 3:
+            return FrameLayer(clip_file, layer_data)
+
+        if layer_data.TextLayerType is not None:
+            return TextLayer(clip_file, layer_data)
+
+        if layer_data.LayerFolder & LayerFolder.FOLDER:
+            return Folder(clip_file, layer_data)
+
+        if layer_data.GradationFillInfo is not None:
+            return GradientLayer(clip_file, layer_data)
+
+        logger.warning("Couldn't find proper layer type for %s. LayerType is %d" % (layer_data.LayerName, layer_data.LayerType))
+        return BaseLayer(clip_file, layer_data)
+
+
+    @property
+    def has_pixels(self):
+        return self._data.LayerType & LayerType.PIXEL
+
+    @property
+    def has_mask(self):
+        return self._data.LayerType & LayerType.MASKED
+
+    @property
+    def mask_type(self):
+        if not self.has_mask:
+            return 0
+        
+        return self._data.LayerMasking
+
+    @property
+    def visible(self):
+        return self._data.LayerVisibility & LayerVisibility.VISIBLE
 
     @property
     def LayerName(self):
         return self._data.LayerName
 
     @LayerName.setter
-    def layer_name(self, layer_name):
+    def LayerName(self, layer_name):
         self._data.layer_name = layer_name
 
     @property
@@ -78,26 +109,59 @@ class BaseLayer():
 
     @property
     def opacity(self):
-        return int(self._data.LayerOpacity / 256) * 100
+        return int(self._data.LayerOpacity / 256 * 100)
 
     @opacity.setter
     def opacity(self, new_opacity):
-        self._data.LayerOpacity = int(new_opacity / 100) * 256
+        self._data.LayerOpacity = int((new_opacity / 100) * 256)
 
     @property
     def blend_mode(self):
-        return self._data.LayerComposite # See constants.LayerComposite
+        return self._data.LayerComposite # See constants.BlendMode
 
     @blend_mode.setter
     def blend_mode(self, new_mode):
-        self._data.LayerComposite = new_mode # From constants.LayerComposite
+        self._data.LayerComposite = new_mode # From constants.BlendMode
 
+    @property
+    def clipping(self):
+        return bool(self._data.LayerClip)
+
+    @clipping.setter
+    def clipping(self, clip):
+        self._data.LayerClip = bool(clip)
+
+    @property
+    def reference(self):
+        return bool(self._data.ReferLayer)
+
+    @reference.setter
+    def reference(self, refer):
+        self._data.ReferLayer = bool(refer)
+
+    def render_mask(self):
+        
+        print()
+        print(self.LayerName)
+
+        if not self.has_mask:
+            return None
+
+        offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
+
+        parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
+
+        print(self.clip_file.data_chunks[offscreen.BlockData].block_datas)
+
+        return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
+
+    # Metadata functions
     def _get_render_mipmap(self):
 
         if self._data.LayerRenderMipmap == 0:
             return None
 
-        render_mipmap = self.clip_file.sql_database.fetch_values("Mipmap")[self._data.LayerRenderMipmap]
+        render_mipmap = self.mipmaps[self._data.LayerRenderMipmap]
 
         return render_mipmap
 
@@ -106,132 +170,24 @@ class BaseLayer():
         if self._data.LayerLayerMaskMipmap == 0:
             return None
 
-        mask_render_mipmap = self.clip_file.sql_database.fetch_values("Mipmap")[self._data.LayerLayerMaskMipmap]
+        mask_render_mipmap = self.mipmaps[self._data.LayerLayerMaskMipmap]
     
         return mask_render_mipmap
 
     def _get_render_offscreen(self, mipmap):
-        
-        mipmapsinfo = self.clip_file.sql_database.fetch_values("MipmapInfo")[mipmap.BaseMipmapInfo]
-
-        offscreen = self.clip_file.sql_database.fetch_values("Offscreen")[mipmapsinfo.Offscreen]
+      
+        mipmapsinfo = self.mipmap_infos[mipmap.BaseMipmapInfo]
+        offscreen = self.offscreens[mipmapsinfo.Offscreen]
 
         return offscreen
 
     def _get_offscreen_attributes(self):
-        
         return self._get_render_offscreen(self._get_render_mipmap()).Attribute
 
-    def _parse_offscreen_attribute(self, offscreen_attribute):
+    def _get_mask_offscreen_attributes(self):
+        return self._get_render_offscreen(self._get_mask_render_mipmap()).Attribute
 
-        columns = ["header_size", "info_section_size", "extra_info_section_size", "u1", "bitmap_width", "bitmap_height", "block_grid_width", "block_grid_height", "pixel_packing_attributes", "u2", "default_fill_color", "u3", "u4", "u5", "u6", "block_count", "u7", "block_sizes"]
-
-        parameter_str = "Parameter".encode('UTF-16-BE')
-        initcolor_str = "InitColor".encode('UTF-16-BE')
-        blocksize_str = "BlockSize".encode('UTF-16-BE')
-
-        offscreen_io = io.BytesIO(offscreen_attribute)
-
-        header_size = read_fmt(">i", offscreen_io)[0]
-        info_section_size = read_fmt(">i", offscreen_io)[0]
-
-        extra_info_section_size = read_fmt(">i", offscreen_io)[0]
-
-        u1 = read_fmt(">i", offscreen_io)[0]
-
-        parameter_size = read_fmt(">i", offscreen_io)[0]
-        assert offscreen_io.read(parameter_size * 2) == parameter_str
-
-        bitmap_width = read_fmt(">i", offscreen_io)[0]
-        bitmap_height = read_fmt(">i", offscreen_io)[0]
-        block_grid_width = read_fmt(">i", offscreen_io)[0]
-        block_grid_height = read_fmt(">i", offscreen_io)[0]
-
-        pixel_packing_attributes = [read_fmt(">i", offscreen_io)[0] for _i in range(16)]
-
-        initcolor_size = read_fmt(">i", offscreen_io)[0]
-        assert offscreen_io.read(initcolor_size * 2) == initcolor_str
-
-        u2 = read_fmt(">i", offscreen_io)[0]
-        default_fill_color = read_fmt(">i", offscreen_io)[0]
-        u3 = read_fmt(">i", offscreen_io)[0]
-        u4 = read_fmt(">i", offscreen_io)[0]
-        u5 = read_fmt(">i", offscreen_io)[0]
-        
-        blocksize_size = read_fmt(">i", offscreen_io)[0]
-        assert offscreen_io.read(blocksize_size * 2) == blocksize_str
-
-        u6 = read_fmt(">i", offscreen_io)[0]
-        block_count = read_fmt(">i", offscreen_io)[0]
-        u7 = read_fmt(">i", offscreen_io)[0]
-
-        blocks_sizes = [read_fmt(">i", offscreen_io)[0] for _i in range(block_count)]
-        
-        values = [header_size, info_section_size, extra_info_section_size, u1, bitmap_width, bitmap_height, block_grid_width, block_grid_height, pixel_packing_attributes, u2, default_fill_color, u3, u4, u5, u6, block_count, u7, blocks_sizes]
-        
-        return namedtuple("mipAttributes", columns)(*values)
-
-    def _decode_chunk_to_pil(self, chunk, offscreen_attributes):
-
-        def channel_to_pil(c_num):
-
-            c_d = {
-                3: "RGB",
-                4: "RGBA",
-                1: "L",
-                2: "LA"
-            }
-
-            return c_d.get(c_num)
-
-        c_count1 = offscreen_attributes.pixel_packing_attributes[1]
-        c_count2 = offscreen_attributes.pixel_packing_attributes[2]
-        c_count3 = offscreen_attributes.pixel_packing_attributes[3]
-
-        block_area = offscreen_attributes.pixel_packing_attributes[4]
-
-        im = Image.new(channel_to_pil(c_count2), (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height), 255*offscreen_attributes.default_fill_color)
-
-        for h in range(offscreen_attributes.block_grid_height):
-            for w in range(offscreen_attributes.block_grid_width):
-                block = chunk.block_datas[h * offscreen_attributes.block_grid_width + w]
-                block_res = b''
-                if block.data_present:
-                    
-                    pix_bytes = zlib.decompress(block.data)
-
-                    if c_count2 == 4:
-
-                        b_alpha = Image.frombuffer(channel_to_pil(1), (256,256), pix_bytes[:block_area])
-                        b_im = Image.frombuffer(channel_to_pil(4), (256,256), pix_bytes[block_area:])
-
-                        # Who thought it would be a good idea? why is a RGBA image over 5 chans, but in that order? with the alpha first then a buffer????
-                        b,g,r,_ = b_im.split()
-                        a, = b_alpha.split()
-
-                        b_bands = (r,g,b,a)
-
-                        #a = [Image.frombuffer("L", (256, 256), pix_bytes[i * block_area:block_area*(i+1)]) for i in range(c_count3)][::-1]
-
-                        block_res = Image.merge("RGBA", b_bands)
-
-                    elif c_count2 == 1:
-                        
-                        b_a = Image.frombuffer(channel_to_pil(1), (256, 256), pix_bytes[:block_area])
-                        block_res = Image.frombuffer(channel_to_pil(c_count2), (256, 256), pix_bytes[block_area:])
-
-                    im.paste(block_res, (256*w,256*h))
-
-        return im
-
-    @property
-    def firstChildIndex(self):
-        return self._data.LayerFirstChildIndex
-
-    @property
-    def nextLayerIndex(self):
-        return self._data.LayerNextIndex    
-
+    # Structure edition
     def delete_layer(self):
         """
         Deletes the layer and all its child layers if the layer is a group from its parent (group or psdimage).
@@ -269,6 +225,8 @@ class BaseLayer():
 
         return self
 
+    def __repr__(self):
+        return "%s(%r)" % (self.__class__.__name__, self.LayerName)
 
 class FolderMixin():
     _layers: list[BaseLayer]
@@ -434,7 +392,7 @@ class FolderMixin():
         """
 
         for layer in self.descendants():
-            if layer.name == name:
+            if layer.LayerName == name:
                 yield layer
 
 class Folder(FolderMixin, BaseLayer):
@@ -446,7 +404,6 @@ class Folder(FolderMixin, BaseLayer):
         self._layers = []
 
         BaseLayer.__init__(self, clip_file, layer_data)
-
 
 class RootFolder(Folder):
     pass
@@ -460,13 +417,35 @@ class PixelLayer(BaseLayer):
 
         offscreen = self._get_render_offscreen(self._get_render_mipmap())
 
-        parsed_attribute = self._parse_offscreen_attribute(offscreen.Attribute)
+        parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
 
-        return self._decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
+        #print(parsed_attribute)
+        return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
 
 
 class PaperLayer(BaseLayer):
-    pass
+
+    # Paper color stored in the three following columns : DrawColorMainRed, DrawColorMainGreen, DrawColorMainBlue over the full scale of an uint
+    # eg: 13369925889263, 1456559825, 3407858463 defines : (79, 86, 202) bitshift of 24 left or right
+
+    # Special RenderType: 20
+
+    @property
+    def color(self):
+        return (self._data.DrawColorMainRed >> 24,
+                self._data.DrawColorMainGreen >> 24,
+                self._data.DrawColorMainBlue >> 24)
+
+    @color.setter
+    def color(self, new_color):
+        pass
+
+    @classmethod
+    def new(self, color):
+        
+        # Create new Layer() Object, set the colors, add it to the begining of the root folder
+        
+        pass
 
 class TextLayer(BaseLayer):
 
@@ -507,15 +486,13 @@ class TextLayer(BaseLayer):
     def color(self):
         pass
 
-    def _parse_text_attribute(self):
-        
-        return None
 
 class CorrectionLayer(BaseLayer):
 
-    # LayerType of 4098
+    # LayerType of 4096
     # Correction metadata in FilterLayerInfo in the DB
-    # First int is the layer type, second the length, then all the correction data 
+    # First int is the layer type, second the length, then all the correction data, see CorrectionType constant for list
+    # SpecialRenderType: 13
 
     # Correction Layer has no external data
 
@@ -524,7 +501,7 @@ class CorrectionLayer(BaseLayer):
 
 class GradientLayer(BaseLayer):
 
-    # Layer type : 2
+    # Layer type : 2 (No pixel, only mask)
     # Gradient info in GradationFillInfo column
     # Gradients don't seem to have external data
     # Screentones have special values in LayerRenderInfo column and following along LayerEffectInfo column
@@ -540,6 +517,7 @@ class VectorLayer(BaseLayer):
     # Vector layer has External chunk but not in a bitmap block list format, referenced in the VectorObjectList
     # Seems to be an Adobe Photoshop Color swatch data, probably has other data following
     # Vector Normal Type : 0
+    # External data index in VectorNormalStrokeIndex
 
     pass
 
@@ -550,6 +528,9 @@ class FrameLayer(Folder, VectorLayer):
     # Special vector folder
 
     # VectorNormalType: 3
+    # ExternalData Referenced in VectorNormalBalloonIndex
+
+    # Special RenderType: 14
 
     def __init__(self, clip_file, layer_data):
 
@@ -558,13 +539,14 @@ class FrameLayer(Folder, VectorLayer):
         VectorLayer.__init__(self, clip_file, layer_data)
     
 
-class StreamLineLayer(Folder, VectorLayer):
+class StreamLineLayer(VectorLayer):
     
     # Defines speedlines layers, LayerType : 0
     # Definition data in StreamLine table, index in the StreamLineIndex column
     # Has vectorized external data, seems to be an Adobe Photoshop Color swatch data
     
     # VectorNormalType: 2
+    # External data index in VectorNormalStrokeIndex
 
     pass
 

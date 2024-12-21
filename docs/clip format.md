@@ -56,7 +56,7 @@
 | - | Variable length 2-byte string | 'BlockStatus' 'BlockCheckSum' |
 | 28 | ? |? |
 
-# Notes, etc.* If you only modify the SQLite database, modify the file size of ``CSFCHUNK`` and the database size of ``CHNKSQLi``.
+## Notes, etc.* If you only modify the SQLite database, modify the file size of ``CSFCHUNK`` and the database size of ``CHNKSQLi``.
 * Offset information of external data is also recorded in the SQLite database, so if the length of the external data changes, also modify Offsets in the SQLite database.
 * Layer thumbnail images are not external data but are stored as png files in the SQLite database.
 *Not fully verified yet. I added a ? to parts that were not clear.

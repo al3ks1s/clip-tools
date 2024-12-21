@@ -1,13 +1,6 @@
 from enum import Enum, IntEnum
 
-class LayerType(Enum):
-    VECTOR = 0 # Defines either Vector, Folder, 3D Layer, Speedlines, pretty much general purpose
-    PIXEL = 1
-    GRADIENT = 2
-
-    ROOT_FOLDER = 256
-    PAPER = 1584
-    CORRECTION = 4098
+# Param Scheme data
 
 class DataType(IntEnum):
     INT = 1
@@ -27,18 +20,40 @@ class LockType(Enum):
 class LockSpecified(Enum):
     pass
 
+# ----------------
+# Data definitions
+
+class LayerType(IntEnum):
+
+    # Defines the flags for the layer type, can be a combination of several of them
+
+    VECTOR = 0 # Defines either Vector, Folder, 3D Layer, Speedlines, pretty much general purpose
+    PIXEL = 1
+    MASKED = 2
+
+    UNK_1 = 16
+
+    ROOT_FOLDER = 256
+    
+    UNK_2 = 512
+    UNK_3 = 1024
+
+    PAPER = 1584 # Paper Layers is the combination of (1024 + 512 + 16) which actually specifies the Paper layer is unknown
+    CORRECTION = 4096 # Usually correction layers have the value 4098 (Correction + Masked)
+
+
 class CorrectionType(IntEnum):
     BRIGHTNESS_CONTRAST = 1
     LEVEL = 2
-    TONE_CURBE = 3
+    TONE_CURVE = 3
     HSL = 4
     COLOR_BALANCE = 5
     REVERSE_GRADIENT = 6
     POSTERIZATION = 7
-    THRESHOLD = 8 # Called Binarization in CSP GUI
+    THRESHOLD = 8 # Also called Binarization in CSP GUI
     GRADIENT_MAP = 9
 
-class LayerComposite(IntEnum):
+class BlendMode(IntEnum):
     NORMAL = 0
     DARKEN = 1
     MULTIPLY = 2
@@ -69,27 +84,53 @@ class LayerComposite(IntEnum):
     DIVIDE = 36
 
 class LayerMasking(IntEnum):
-    # 0
-    # 1
-    # 3
-    # 32
-    # 33
-    # 114
-    pass
+    # 0 No mask
+    # 1 Mask enabled
+    # 3 Mask + Show mask area
+    # 32 For folders without masks
+    # 33 For folders with mask (Folder + Mask)
+    # 114, For Frame folders (MASK_AREA + UNK + Folder + Frame)
+    MASK_ENABLED = 1
+    MASK_AREA = 2
+    UNK = 16
+    FOLDER = 32
+    FRAME = 64
+    
 
 class LayerVisibility(IntEnum):
-    # 0
-    # 1
-    # 3
-    # 5
-    # 7
+    # Most likely a flag mask too, combining powers of two to achieve the states below
+    # 0 Invisible
+    # 1 Normal
+    # 3 Mask visible?
+    # 5 Mask + Ruler (Seems limited to ruler layers)
+    # 7 For FrameBorder Layers
+    VISIBLE = 1
+    MASK_VISIBLE = 2
+    RULER_VISIBLE = 4
+    
+class LayerFolder(IntEnum):
+    FOLDER = 1
+    CLOSED = 16
+
+class LayerLock(IntEnum):
     pass
 
 class LayerSelect(IntEnum):
+    # Flag system too
+    # 0
+    # 2 
+    # 256
+    # 512
     pass
 
 class VectorNormalType(IntEnum):
-    pass
+    NORMAL = 0
+    UNKN = 1 # Probably part of the VectorNormalFillIndex
+    SPEEDLINLES = 2
+    FRAMEBORDER = 3
 
 class EffectRenderType(IntEnum):
+    pass
+
+class TextAttribute(IntEnum):
     pass

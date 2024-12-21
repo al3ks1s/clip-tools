@@ -53,30 +53,50 @@ class Database:
 
     def fetch_project_data(self):
 
-        return self.row_to_object(self._execute_query(f"Select * from Project")[0], "Project")
+        return self._row_to_object(self._execute_query(f"Select * from Project")[0], "Project")
 
-    def fetch_values(self, table):
+    def get_table(self, table):
 
         # Do not use this to fetch metadata tables like ParamScheme, ElemScheme, etc
         # Do not use this to fetch project information. It has a single row so no MainId.
 
         if table not in self.table_scheme:
-            return None # Raise an exception?
+            return None # Raise an exception
 
-        return self.map_results(self._execute_query(f"Select * from {table}"), table)
+        return self._map_results(self._execute_query(f"Select * from {table}"), table)
 
-    def map_results(self, rows, table):
+    def get_referenced_items(self, table, column, value):
+
+        if table not in self.table_scheme:
+            return None # Raise an exception
+
+        return self._map_results(self._execute_query(f"Select * from {table} where {column}=={value}"), table)
+
+
+    def create_table(self, table):
+        pass
+
+    def edit_entry(self, table, value_dict):
+        pass
+
+    def insert_new_entry(self, table, value_dict):
+        pass
+
+    def _alter_table(self, table, new_columns):
+        pass
+
+    def _map_results(self, rows, table):
         
         mapped_values = {}
 
         for row in rows:
             
-            mapped_row = self.row_to_object(row, table)
+            mapped_row = self._row_to_object(row, table)
             mapped_values[mapped_row.MainId] = mapped_row
 
         return mapped_values
 
-    def row_to_object(self, row, table):
+    def _row_to_object(self, row, table):
         
         scheme = self.table_scheme[table]
         data_type = namedtuple(table, scheme)
@@ -89,12 +109,11 @@ class Database:
         
         return _class(**mapped_row)
 
-    def edit_entry(self, table, value_dict):
-        pass
 
-    def insert_new_entry(self, table, value_dict):
+    @classmethod
+    def new(cls):
         pass
-
+    
     @classmethod
     def read(cls, fp):
         

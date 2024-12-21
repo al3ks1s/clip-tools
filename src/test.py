@@ -9,10 +9,10 @@ from PIL import Image
 import zlib
 
 #"""
-workdir = '../tests/clip-tools-samples'
+workdir = '../tests/Samples'
 
-#filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
-filelist = ["Illustration.clip"]
+filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
+#filelist = ["Illustration-Base-Monochrome.clip"]
 
 """
 
@@ -24,11 +24,15 @@ filelist = ["page0001.clip"]
 #"""
 
 for f in filelist:
+
+    print()
+    print(f)
+
     with open(os.path.join(workdir, f), "rb") as fp:
         
         proj = Project.open(fp)
 
-        print(proj.canvas.root_folder[0])
+        #print(list(proj.canvas.root_folder.descendants()))
 
         keys = proj.clip_file.sql_database.table_scheme.copy()
         del keys["ElemScheme"]
@@ -40,21 +44,18 @@ for f in filelist:
         del keys["sqlite_sequence"]
 
         for k in keys:
-            proj.clip_file.sql_database.fetch_values(k)
+            proj.clip_file.sql_database.get_table(k)
 
-        """
-        clipFile = ClipStudioFile.read(fp)
+        #proj.canvas.root_folder[0].topil().show()
 
         #clipFile.sql_database._scheme_to_classes()
         
-        layers = clipFile.sql_database.fetch_values("Layer")
                       
-        for layer in layers:
+        for layer in proj.canvas.root_folder.descendants():
             
-            l = BaseLayer.new(clipFile, layers[layer])
-
-            if isinstance(l, PixelLayer) and l.LayerName == "Pix Layer":
+            if isinstance(layer, PixelLayer):
                 
-                im = l.topil()
-                im.show()
-        """
+                print("Showing pixel layer", layer.LayerName)
+
+                im = layer.topil()
+                #im.show()

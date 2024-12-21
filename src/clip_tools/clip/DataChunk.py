@@ -105,9 +105,8 @@ class BlockDatas(list):
                 for i in range(block_count):
                     blocks.block_checksums.append(read_fmt(">i", fp)[0])
                 
-                has_next_block = False
             else:
-                break                
+                break
 
         return blocks
 

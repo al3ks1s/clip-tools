@@ -7,7 +7,7 @@ class Project():
         self.clip_file = clip_file
         self._data = data
 
-        canvas_data = self.clip_file.sql_database.fetch_values("Canvas")[1]
+        canvas_data = self.clip_file.sql_database.get_table("Canvas")[self._data.ProjectCanvas]
 
         self.canvas = Canvas(clip_file, canvas_data)
     
@@ -23,9 +23,11 @@ class Project():
     def save(cls, fp):
         pass
 
+    @classmethod
+    def new(cls, fp):
+        pass
+
 
 class MultifileProject():
     pass
     # Temp name for the class using the .cmc files
-        
-
