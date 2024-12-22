@@ -18,7 +18,7 @@ class ChunkHeader:
         
         assert fp.read(8) == ChunkHeader.chunk_signature
 
-        header_size = read_fmt(">q", fp)[0]
+        header_size = read_fmt(">q", fp)
 
         header_data = fp.read(header_size)
 

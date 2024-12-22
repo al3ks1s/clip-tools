@@ -1,8 +1,9 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
 from clip_tools.utils import read_fmt
 from clip_tools.clip.ClipData import Layer
-from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder
+from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder, LayerLock, LayerMasking
 from clip_tools.parsers import *
+from clip_tools.api.Gradient import Gradient
 
 import io
 import zlib
@@ -34,6 +35,15 @@ class BaseLayer():
         self.mipmaps = self.clip_file.sql_database.get_referenced_items("Mipmap", "LayerId", self._data.MainId)
         self.mipmap_infos = self.clip_file.sql_database.get_referenced_items("MipmapInfo", "LayerId", self._data.MainId)
         self.offscreens = self.clip_file.sql_database.get_referenced_items("Offscreen", "LayerId", self._data.MainId)
+
+        if self.has_effect:
+            pass
+
+        if self.has_mask:
+            pass
+
+        if self.has_ruler:
+            pass
 
     @classmethod
     def from_db(cls, clip_file, layer_data):
@@ -73,6 +83,10 @@ class BaseLayer():
 
 
     @property
+    def has_ruler(self):
+        return self._data.RulerRange is not None
+
+    @property
     def has_pixels(self):
         return self._data.LayerType & LayerType.PIXEL
 
@@ -82,10 +96,8 @@ class BaseLayer():
 
     @property
     def mask_type(self):
-        if not self.has_mask:
-            return 0
         
-        return self._data.LayerMasking
+        return LayerMasking(self._data.LayerMasking)
 
     @property
     def visible(self):
@@ -98,14 +110,6 @@ class BaseLayer():
     @LayerName.setter
     def LayerName(self, layer_name):
         self._data.layer_name = layer_name
-
-    @property
-    def lock(self):
-        return self._data.LayerLock
-
-    @lock.setter
-    def lock(self, lock_mask):
-        self._data.LayerLock = lock_mask
 
     @property
     def opacity(self):
@@ -138,6 +142,21 @@ class BaseLayer():
     @reference.setter
     def reference(self, refer):
         self._data.ReferLayer = bool(refer)
+
+    @property
+    def has_effect(self):
+        return self._data.LayerEffectAttached == 1
+
+    @property
+    def lock(self):
+        return LayerLock(self._data.LayerLock)
+
+    @lock.setter
+    def lock(self, lock_flag):
+        self._data.LayerLock = lock_flag
+
+    def unlock(self):
+        self._data.LayerLock = 0
 
     def render_mask(self):
         
@@ -489,8 +508,8 @@ class TextLayer(BaseLayer):
 
 class CorrectionLayer(BaseLayer):
 
-    # LayerType of 4096
-    # Correction metadata in FilterLayerInfo in the DB
+    # LayerType of 4096 + Mask by Default
+    # Correction metadata in FilterLayerInfo column in the DB
     # First int is the layer type, second the length, then all the correction data, see CorrectionType constant for list
     # SpecialRenderType: 13
 
@@ -506,8 +525,33 @@ class GradientLayer(BaseLayer):
     # Gradients don't seem to have external data
     # Screentones have special values in LayerRenderInfo column and following along LayerEffectInfo column
 
-    pass
+    def __init__(self, clip_file, layer_data):
 
+        BaseLayer.__init__(self, clip_file, layer_data)
+
+        self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
+
+
+    @property
+    def shape(self):
+        return self.gradient.shape
+
+    @property
+    def repeat_mode(self):
+        return self.gradient.repeat_mode
+    
+    @property
+    def anti_aliasing(self):
+        return self.gradient.anti_aliasing
+
+    @property
+    def start(self):
+        return self.gradient.start
+    
+    @property
+    def end(self):
+        return self.gradient.end
+            
 
 class VectorLayer(BaseLayer):
 

@@ -36,13 +36,10 @@ class Database:
         for row in param_scheme:
             if row[1] not in self.param_scheme.keys():
                 self.param_scheme[row[1]] = {}
-            
+
             self.param_scheme[row[1]][row[2]] = { k:v for k,v in zip(self.table_scheme["ParamScheme"][3:], row[3:]) }
 
     def init_db(self):
-        
-        
-        
         pass
 
     def _execute_query(self, query):
@@ -119,7 +116,7 @@ class Database:
         
         assert fp.read(8) == Database.chunk_signature
 
-        database_size = read_fmt(">q", fp)[0]
+        database_size = read_fmt(">q", fp)
 
         database = fp.read(database_size)
 

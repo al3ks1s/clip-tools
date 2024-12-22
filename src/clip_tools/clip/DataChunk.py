@@ -29,26 +29,26 @@ class BlockData:
         
         data = None
 
-        block_data_size = read_fmt(">i", fp)[0]  
-        block_data_text_size = read_fmt(">i", fp)[0] * 2
+        block_data_size = read_fmt(">i", fp)  
+        block_data_text_size = read_fmt(">i", fp) * 2
         
         signature = fp.read(block_data_text_size)
 
-        block_data_index = read_fmt(">i", fp)[0]
+        block_data_index = read_fmt(">i", fp)
 
         fp.read(12) #????
 
-        data_present = read_fmt(">i", fp)[0]
+        data_present = read_fmt(">i", fp)
 
         if data_present:
-            subblock_size = read_fmt(">i", fp)[0]
-            le_sublock_size = read_fmt('<i', fp)[0]
+            subblock_size = read_fmt(">i", fp)
+            le_sublock_size = read_fmt('<i', fp)
 
             assert subblock_size == le_sublock_size + 4 # Why the size twice? Good question
 
             data = fp.read(le_sublock_size)
 
-        block_end_chunk_size = read_fmt(">i", fp)[0] * 2
+        block_end_chunk_size = read_fmt(">i", fp) * 2
         end_signature = fp.read(block_end_chunk_size)
         assert end_signature == BlockData.end_chunk_signature
 
@@ -67,12 +67,12 @@ class BlockDatas(list):
 
         while fp.tell() < fp.getbuffer().nbytes:
 
-            block_data_size = read_fmt(">i", fp)[0]
+            block_data_size = read_fmt(">i", fp)
 
             if block_data_size == 11 or block_data_size == 13: # Block Status or Block checksum
                 signature = signature = fp.read(block_data_size * 2)
             else:
-                block_data_text_size = read_fmt(">i", fp)[0] * 2
+                block_data_text_size = read_fmt(">i", fp) * 2
                 signature = fp.read(block_data_text_size)
 
             if signature == BlockData.begin_chunk_signature:
@@ -84,26 +84,26 @@ class BlockDatas(list):
 
             elif signature == BlockData.status_chunk_signature:
 
-                unknown_var = read_fmt(">i", fp)[0] # Need to find out what this is, usually 0c
-                block_count = read_fmt(">i", fp)[0]
-                unknown_var2 = read_fmt(">i", fp)[0] # Looks like the block count a second time
+                unknown_var = read_fmt(">i", fp) # Need to find out what this is, usually 0c
+                block_count = read_fmt(">i", fp)
+                unknown_var2 = read_fmt(">i", fp) # Looks like the block count a second time
 
                 assert block_count == len(blocks)
 
                 for i in range(block_count):
-                    blocks.block_status.append(read_fmt(">i", fp)[0])
+                    blocks.block_status.append(read_fmt(">i", fp))
         
             elif signature == BlockData.checksum_chunk_signature:
 
-                unknown_var3 = read_fmt(">i", fp)[0] # Need to find out what this is, usually 0c
+                unknown_var3 = read_fmt(">i", fp) # Need to find out what this is, usually 0c
                 
-                block_count = read_fmt(">i", fp)[0]
-                unknown_var4 = read_fmt(">i", fp)[0] # Looks like the block count a second time
+                block_count = read_fmt(">i", fp)
+                unknown_var4 = read_fmt(">i", fp) # Looks like the block count a second time
 
                 assert block_count == len(blocks)
                 
                 for i in range(block_count):
-                    blocks.block_checksums.append(read_fmt(">i", fp)[0])
+                    blocks.block_checksums.append(read_fmt(">i", fp))
                 
             else:
                 break
@@ -130,13 +130,13 @@ class DataChunk:
     def read(cls, fp):
         
 
-        external_chunk_size = read_fmt(">q", fp)[0]
+        external_chunk_size = read_fmt(">q", fp)
         
-        external_chunk_id_length = read_fmt(">q", fp)[0]
+        external_chunk_id_length = read_fmt(">q", fp)
 
         external_chunk_id = fp.read(external_chunk_id_length)
 
-        external_chunk_size_2 = read_fmt(">q", fp)[0]
+        external_chunk_size_2 = read_fmt(">q", fp)
 
         assert external_chunk_size == external_chunk_size_2 + external_chunk_id_length + 16
     

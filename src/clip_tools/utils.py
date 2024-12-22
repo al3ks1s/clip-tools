@@ -15,7 +15,7 @@ def read_fmt(fmt, fp):
             "Failed to read data section: read=%d, expected=%d. "
             "Likely the file is corrupted." % (len(data), fmt_size)
         )
-    return struct.unpack(fmt, data)
+    return struct.unpack(fmt, data)[0]
 
 
 def write_fmt(fp, fmt, *args):
@@ -47,6 +47,13 @@ def write_bytes(fp, data):
             "Failed to write data: written=%d, expected=%d." % (written, len(data))
         )
     return written
+
+def read_csp_unicode_str(size_fmt, f):
+    str_size = read_fmt(size_fmt, f)  
+    if str_size == None:
+        return None
+    string_data = f.read(2 * str_size)
+    return string_data.decode('UTF-16-BE')
 
 def pack(fmt, *args):
     fmt = str(">" + fmt)

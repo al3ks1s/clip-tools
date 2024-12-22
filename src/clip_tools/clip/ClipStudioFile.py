@@ -28,8 +28,8 @@ class ClipStudioFile:
     def read(cls, fp):
 
         assert ClipStudioFile.chunk_signature == fp.read(8)
-        file_size = read_fmt(">q", fp)[0]
-        header_offset = read_fmt(">q", fp)[0]
+        file_size = read_fmt(">q", fp)
+        header_offset = read_fmt(">q", fp)
 
         header = ChunkHeader.read(fp)
         data_chunks = DataChunks.read(fp)

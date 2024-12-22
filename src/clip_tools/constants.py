@@ -1,5 +1,6 @@
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, IntFlag
 
+# -----------------
 # Param Scheme data
 
 class DataType(IntEnum):
@@ -7,6 +8,8 @@ class DataType(IntEnum):
     FLOAT = 2
     STR = 3
     BYTES = 4
+
+"""
 
 class Flag(Enum):
     pass
@@ -20,10 +23,12 @@ class LockType(Enum):
 class LockSpecified(Enum):
     pass
 
+"""
+
 # ----------------
 # Data definitions
 
-class LayerType(IntEnum):
+class LayerType(IntFlag):
 
     # Defines the flags for the layer type, can be a combination of several of them
 
@@ -81,9 +86,10 @@ class BlendMode(IntEnum):
     SATURATION = 24
     COLOR = 25
     BRIGHTNESS = 26
+    
     DIVIDE = 36
 
-class LayerMasking(IntEnum):
+class LayerMasking(IntFlag):
     # 0 No mask
     # 1 Mask enabled
     # 3 Mask + Show mask area
@@ -97,25 +103,20 @@ class LayerMasking(IntEnum):
     FRAME = 64
     
 
-class LayerVisibility(IntEnum):
-    # Most likely a flag mask too, combining powers of two to achieve the states below
-    # 0 Invisible
-    # 1 Normal
-    # 3 Mask visible?
-    # 5 Mask + Ruler (Seems limited to ruler layers)
-    # 7 For FrameBorder Layers
+class LayerVisibility(IntFlag):
     VISIBLE = 1
     MASK_VISIBLE = 2
     RULER_VISIBLE = 4
     
-class LayerFolder(IntEnum):
+class LayerFolder(IntFlag):
     FOLDER = 1
     CLOSED = 16
 
-class LayerLock(IntEnum):
-    pass
+class LayerLock(IntFlag):
+    FULL = 1
+    ALPHA = 16
 
-class LayerSelect(IntEnum):
+class LayerSelect(IntFlag):
     # Flag system too
     # 0
     # 2 
@@ -134,3 +135,15 @@ class EffectRenderType(IntEnum):
 
 class TextAttribute(IntEnum):
     pass
+
+class GradientRepeatMode(IntEnum):
+    CLIP = 0
+    REPEAT = 1
+    MIRROR = 2
+    EMPTY = 3
+
+
+class GradientShape(IntEnum):
+    LINEAR = 0
+    CIRCLE = 1
+    ELLIPSE = 2

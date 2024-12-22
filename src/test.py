@@ -49,13 +49,14 @@ for f in filelist:
         #proj.canvas.root_folder[0].topil().show()
 
         #clipFile.sql_database._scheme_to_classes()
-        
-                      
-        for layer in proj.canvas.root_folder.descendants():
-            
-            if isinstance(layer, PixelLayer):
-                
-                print("Showing pixel layer", layer.LayerName)
 
-                im = layer.topil()
+
+        for layer in proj.canvas.root_folder.descendants():
+
+            if isinstance(layer, GradientLayer):
+
+                print("Showing layer", layer.LayerName)
+                print("Shape :", layer.shape)
+                #im = layer.topil()
                 #im.show()
+                #"""
