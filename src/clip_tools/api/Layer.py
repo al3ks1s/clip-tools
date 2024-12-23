@@ -4,6 +4,8 @@ from clip_tools.clip.ClipData import Layer
 from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder, LayerLock, LayerMasking
 from clip_tools.parsers import *
 from clip_tools.api.Gradient import Gradient
+from clip_tools.api.Effect import LayerEffect
+from clip_tools.api.Correction import parse_correction_attributes
 
 import io
 import zlib
@@ -36,8 +38,12 @@ class BaseLayer():
         self.mipmap_infos = self.clip_file.sql_database.get_referenced_items("MipmapInfo", "LayerId", self._data.MainId)
         self.offscreens = self.clip_file.sql_database.get_referenced_items("Offscreen", "LayerId", self._data.MainId)
 
-        if self.has_effect:
-            pass
+        self.effect = None
+        self.mask = None
+        self.ruler = None
+
+        if self.has_effect or self._data.LayerEffectInfo is not None:
+            self.effect = LayerEffect.from_bytes(self._data.LayerEffectInfo)
 
         if self.has_mask:
             pass
@@ -95,6 +101,10 @@ class BaseLayer():
         return self._data.LayerType & LayerType.MASKED
 
     @property
+    def has_effect(self):
+        return self._data.LayerEffectAttached == 1
+
+    @property
     def mask_type(self):
         
         return LayerMasking(self._data.LayerMasking)
@@ -143,9 +153,6 @@ class BaseLayer():
     def reference(self, refer):
         self._data.ReferLayer = bool(refer)
 
-    @property
-    def has_effect(self):
-        return self._data.LayerEffectAttached == 1
 
     @property
     def lock(self):
@@ -411,7 +418,7 @@ class FolderMixin():
         """
 
         for layer in self.descendants():
-            if layer.LayerName == name:
+            if name in layer.LayerName:
                 yield layer
 
 class Folder(FolderMixin, BaseLayer):
@@ -515,7 +522,12 @@ class CorrectionLayer(BaseLayer):
 
     # Correction Layer has no external data
 
-    pass
+    def __init__(self, clip_file, layer_data):
+
+        BaseLayer.__init__(self, clip_file, layer_data)
+
+        print(self.LayerName)
+        self.correction = parse_correction_attributes(self._data.FilterLayerInfo)
 
 
 class GradientLayer(BaseLayer):
@@ -530,7 +542,6 @@ class GradientLayer(BaseLayer):
         BaseLayer.__init__(self, clip_file, layer_data)
 
         self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
-
 
     @property
     def shape(self):

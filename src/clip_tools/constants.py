@@ -1,4 +1,4 @@
-from enum import Enum, IntEnum, IntFlag
+from enum import Enum, IntEnum, IntFlag, auto
 
 # -----------------
 # Param Scheme data
@@ -86,7 +86,7 @@ class BlendMode(IntEnum):
     SATURATION = 24
     COLOR = 25
     BRIGHTNESS = 26
-    
+
     DIVIDE = 36
 
 class LayerMasking(IntFlag):
@@ -147,3 +147,36 @@ class GradientShape(IntEnum):
     LINEAR = 0
     CIRCLE = 1
     ELLIPSE = 2
+
+class ExtractLinesDirection(IntFlag):
+    LEFT = auto()
+    RIGHT = auto()
+    BOTTOM = auto()
+    TOP = auto()
+
+class ScreenToneShape(IntEnum):
+
+    CIRCLE = 1
+    SQUARE = 2
+    LOZENGE = 3
+    LINE = 4
+    CROSS = 5
+    ELLIPSE = 6
+    NOISE = 7
+    SUGAR_PLUM = 8
+    ASTERISK = 9
+    STAR = 10
+    CARROT = 11
+    CHERRY_ROUND = 12
+    CHERRY_MID = 13
+    CHERRY_THIN = 14
+    FLOWER_ROUND = 15
+    FLOWER_MID = 16
+    FLOWER_THIN = 17
+    CLOVER_ROUND = 18
+    CLOVER_THIN = 19
+    NINJA_STAR = 20
+    DIAMOND = 21
+    HEART = 22
+    CLUBS = 23
+    SPADES = 24

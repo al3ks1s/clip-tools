@@ -4,13 +4,18 @@ import zlib
 from PIL import Image
 from clip_tools.utils import read_fmt, read_csp_unicode_str
 
-from clip_tools.constants import GradientRepeatMode, GradientShape
+from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape
 
 from collections import namedtuple
+
+import logging
+
+import difflib
 
 Position = namedtuple("Position", ["x", "y"])
 Color = namedtuple("Color", ["r", "g", "b"])
 
+logger = logging.getLogger(__name__)
 
 def parse_offscreen_attribute(offscreen_attribute):
 
@@ -123,7 +128,7 @@ def parse_gradient_info(gradation_fill_info):
     gradient_data = io.BytesIO(gradation_fill_info)
 
     gradient_data_size = read_fmt(">i", gradient_data)
-    unk1 = read_fmt(">i", gradient_data)
+    unk1 = read_fmt(">i", gradient_data) # Always '0x02'
 
     gradient_info = {}
 
@@ -187,8 +192,159 @@ def parse_gradient_info(gradation_fill_info):
 
     return gradient_info
 
+
 def parse_effect_info(layer_effect_info):
-    pass
+
+    layer_effect_data = io.BytesIO(layer_effect_info)
+
+    effect_data_size = read_fmt(">i", layer_effect_data)
+    unk1 = read_fmt(">i", layer_effect_data) # Always '0x02'
+
+    effects = {}
+
+    while layer_effect_data.tell() < effect_data_size:
+
+        param_name = read_csp_unicode_str(">i", layer_effect_data)
+
+        if param_name == "EffectEdge":
+
+            nmt = namedtuple("EffectEdge", ["enabled", "thickness", "rgb"])
+
+            edge_enabled = read_fmt(">i", layer_effect_data)
+            thickness = read_fmt(">d", layer_effect_data)
+
+            rgb = [read_fmt(">I", layer_effect_data) >> 24 for _ in range(3)]
+
+            effects[param_name] = nmt(edge_enabled, thickness, rgb)
+
+        if param_name == "EffectTone":
+
+            nmt = namedtuple("EffectTone", ["enabled", "resolution", "shape", "use_image_brightness", "frequency", "angle", "noise_size", "noise_factor", "position"])
+
+            screentone_enabled = read_fmt(">i", layer_effect_data)
+
+            resolution = read_fmt(">d", layer_effect_data)#?
+
+            screentone_shape = ScreenToneShape(read_fmt(">i", layer_effect_data))# Perhaps the shape of the screentone?
+            use_image_brightness = bool(read_fmt(">i", layer_effect_data)) # Use image brightness (default is color)
+            unk = read_fmt(">i", layer_effect_data) # Consistently 0x14
+
+            frequency = read_fmt(">d", layer_effect_data) # Between 5.0 and 85.0
+
+            unk = read_fmt(">i", layer_effect_data) # Padding? consistently 0
+            unk = read_fmt(">i", layer_effect_data) # Padding? consistently 1
+
+            angle = read_fmt(">i", layer_effect_data) # Between 0 and 359
+
+            noise_size = read_fmt(">i", layer_effect_data)
+            noise_factor = read_fmt(">i", layer_effect_data)
+
+            unk = read_fmt(">i", layer_effect_data) # Padding? consistently 0
+            unk = read_fmt(">i", layer_effect_data) # Padding? consistently 0
+
+            position = Position(read_fmt(">d", layer_effect_data), read_fmt(">d", layer_effect_data))
+
+            effects[param_name] = nmt(screentone_enabled, resolution, screentone_shape, use_image_brightness, frequency, angle, noise_size, noise_factor, position)
+
+        if param_name == "EffectTextureMap":
+            
+            section_size = read_fmt(">i", layer_effect_data)
+            layer_effect_data.read(section_size - 4)
+
+            # Bypass
+
+        if param_name == "EffectApplyOpacity":
+            
+            section_size = read_fmt(">i", layer_effect_data)
+            apply_opacity_enabled = read_fmt(">i", layer_effect_data) # Enable layer reflect opacity
+            
+            effects[param_name] = apply_opacity_enabled
+
+        if param_name == "EffectToneAreaColor":
+            
+            section_size = read_fmt(">i", layer_effect_data)
+            layer_effect_data.read(section_size - 4)
+
+            # Bypass
+
+        if param_name == "EffectTonePosterize":
+
+            nmt = namedtuple("EffectTonePosterize", ["enabled", "posterization_counts", "posterizations"])
+
+            section_size = read_fmt(">i", layer_effect_data)
+            posterize_enabled = read_fmt(">i", layer_effect_data)
+
+            posterize_count = read_fmt(">i", layer_effect_data)
+            posterizations = []
+
+            for _ in range(posterize_count):
+                posterize_input = read_fmt(">i", layer_effect_data) # Posterization input over 0..255
+                posterize_output = read_fmt(">i", layer_effect_data) # Postrize output over 1..99
+
+                posterizations.append((posterize_input, posterize_output))
+
+            effects[param_name] = nmt(posterize_enabled, posterize_count, posterizations)
+
+        if param_name == "EffectWaterEdge":
+
+            nmt = namedtuple("EffectWaterEdge", ["enabled", "range", "opacity", "darkness", "blurring"])
+
+            section_size = read_fmt(">i", layer_effect_data)
+            water_edge_enabled = read_fmt(">i", layer_effect_data)
+            
+            edge_range = read_fmt(">d", layer_effect_data) # Between 1.0 and 20.0
+            edge_opacity = read_fmt(">d", layer_effect_data) # Between 1 and 100
+            edge_darkness = read_fmt(">d", layer_effect_data) # Between 0 and 100
+            edge_blurring = read_fmt(">d", layer_effect_data) # Between 0 and 10.0
+
+            effects[param_name] = nmt(water_edge_enabled, edge_range, edge_opacity, edge_darkness, edge_blurring)
+
+        if param_name == "EffectLine":
+            
+            nmt = namedtuple("EffectLine", ["enabled", "black_fill_enabled", "black_fill_level", "posterize_enabled", "line_width", "effect_threshold", "directions", "posterize_count", "posterizations", "anti_aliasing"])
+
+            section_size = read_fmt(">i", layer_effect_data)
+            extract_line_enabled = read_fmt(">i", layer_effect_data)
+
+            black_fill_enabled = read_fmt(">i", layer_effect_data)
+            black_fill_level = 255 - (read_fmt(">I", layer_effect_data) >> 24)
+
+            posterize_enabled = read_fmt(">i", layer_effect_data)
+            unk = read_fmt(">i", layer_effect_data) # Padding? Always 0
+
+            line_width = read_fmt(">i", layer_effect_data)
+            unk = read_fmt(">i", layer_effect_data) # Padding? Always 0
+
+            effect_threshold = read_fmt(">i", layer_effect_data)
+            unk = read_fmt(">d", layer_effect_data) # Thickness? Something else? Consistently 5.0
+            unk = read_fmt(">d", layer_effect_data) # Thickness? Something else? Consistently 5.0
+            unk = read_fmt(">i", layer_effect_data) # Consistently 0x04
+
+            directions_map = {0:"Left",1:"Top",2:"Right",3:"Bottom"}
+            directions = {}
+            
+            for _ in range(4):
+                direction = read_fmt(">i", layer_effect_data)
+                direction_enabled = bool(read_fmt(">i", layer_effect_data))
+
+                directions[directions_map[direction]] = direction_enabled
+
+            posterize_count = read_fmt(">i", layer_effect_data)
+            posterizations = []
+
+            for _ in range(posterize_count):
+                posterize_input = read_fmt(">i", layer_effect_data) # Posterization input over 0..255
+                posterize_output = read_fmt(">i", layer_effect_data) # Postrize output over 1..99
+
+                posterizations.append((posterize_input, posterize_output))
+            
+            unk = read_fmt(">i", layer_effect_data) # Consistently 0x01
+            anti_aliasing = read_fmt(">i", layer_effect_data) # Edge anti aliasing ?  Why is it here
+            unk = read_fmt(">i", layer_effect_data) # Consistently 0xc8
+
+            effects[param_name] = nmt(extract_line_enabled, black_fill_enabled, black_fill_level, posterize_enabled, line_width, effect_threshold, directions, posterize_count, posterizations, anti_aliasing)
+
+    return effects
 
 def parse_text_attribute(text_layer_attribute_array):
         
