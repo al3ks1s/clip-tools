@@ -4,7 +4,7 @@ from clip_tools.clip.ClipData import Layer
 from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder, LayerLock, LayerMasking
 from clip_tools.parsers import *
 from clip_tools.api.Gradient import Gradient
-from clip_tools.api.Effect import LayerEffect
+from clip_tools.api.Effect import LayerEffects
 from clip_tools.api.Correction import parse_correction_attributes
 
 import io
@@ -43,10 +43,18 @@ class BaseLayer():
         self.ruler = None
 
         if self.has_effect or self._data.LayerEffectInfo is not None:
-            self.effect = LayerEffect.from_bytes(self._data.LayerEffectInfo)
+            self.effect = LayerEffects.from_bytes(self._data.LayerEffectInfo)
 
         if self.has_mask:
-            pass
+            
+            mask_offscreen_attribute = parse_offscreen_attribute(self._get_mask_offscreen_attributes())
+            mask_offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
+
+            #print(mask_offscreen.BlockData)
+            #print(mask_offscreen_attribute)
+
+            im = decode_chunk_to_pil(self.clip_file.data_chunks[mask_offscreen.BlockData], mask_offscreen_attribute)
+            
 
         if self.has_ruler:
             pass
@@ -448,7 +456,6 @@ class PixelLayer(BaseLayer):
         #print(parsed_attribute)
         return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
 
-
 class PaperLayer(BaseLayer):
 
     # Paper color stored in the three following columns : DrawColorMainRed, DrawColorMainGreen, DrawColorMainBlue over the full scale of an uint
@@ -525,8 +532,6 @@ class CorrectionLayer(BaseLayer):
     def __init__(self, clip_file, layer_data):
 
         BaseLayer.__init__(self, clip_file, layer_data)
-
-        print(self.LayerName)
         self.correction = parse_correction_attributes(self._data.FilterLayerInfo)
 
 
@@ -540,8 +545,11 @@ class GradientLayer(BaseLayer):
     def __init__(self, clip_file, layer_data):
 
         BaseLayer.__init__(self, clip_file, layer_data)
-
+        print(self.LayerName)
         self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
+        print("----------------------")
+        print()
+
 
     @property
     def shape(self):
@@ -567,7 +575,6 @@ class GradientLayer(BaseLayer):
 class VectorLayer(BaseLayer):
 
     # A vector layer has a LayerType of 0
-    # 
 
     # Vector layer has External chunk but not in a bitmap block list format, referenced in the VectorObjectList
     # Seems to be an Adobe Photoshop Color swatch data, probably has other data following
@@ -590,9 +597,7 @@ class FrameLayer(Folder, VectorLayer):
     def __init__(self, clip_file, layer_data):
 
         self._layers = []
-
         VectorLayer.__init__(self, clip_file, layer_data)
-    
 
 class StreamLineLayer(VectorLayer):
     

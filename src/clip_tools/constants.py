@@ -28,6 +28,12 @@ class LockSpecified(Enum):
 # ----------------
 # Data definitions
 
+class CanvasChannelBytes(IntFlag):
+    
+    MONOCHROME = 1
+    BW = 16
+    RGB = 32
+
 class LayerType(IntFlag):
 
     # Defines the flags for the layer type, can be a combination of several of them
@@ -37,13 +43,14 @@ class LayerType(IntFlag):
     MASKED = 2
 
     UNK_1 = 16
+    UNK_2 = 32
 
     ROOT_FOLDER = 256
     
-    UNK_2 = 512
-    UNK_3 = 1024
+    UNK_3 = 512
+    UNK_4 = 1024
 
-    PAPER = 1584 # Paper Layers is the combination of (1024 + 512 + 16) which actually specifies the Paper layer is unknown
+    PAPER = 1584 # Paper Layers is the combination of (1024 + 512 + 32 + 16) which actually specifies the Paper layer is unknown
     CORRECTION = 4096 # Usually correction layers have the value 4098 (Correction + Masked)
 
 

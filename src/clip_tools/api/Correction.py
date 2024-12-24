@@ -6,6 +6,8 @@ import io
 import logging
 from clip_tools.utils import read_fmt
 
+from clip_tools.data_classes import ColorStop, Color, Position, CurveList, CurvePoint, LevelCorrection
+
 from collections import namedtuple
 
 logger = logging.getLogger(__name__)
@@ -28,14 +30,6 @@ class BrightnessContrast():
 @define
 class Level():
 
-    @define
-    class LevelCorrection:
-        input_left: int # TODO Default fields + validators
-        intput_mid: int
-        input_right: int
-        output_left: int
-        output_right: int
-
     RGB: LevelCorrection
     Red: LevelCorrection
     Green: LevelCorrection
@@ -52,7 +46,7 @@ class Level():
 
         while correction_data.tell() < section_size + 8:
             
-            levels.append(Level.LevelCorrection(read_fmt(">H", correction_data) >> 8,
+            levels.append(LevelCorrection(read_fmt(">H", correction_data) >> 8,
                                                 read_fmt(">H", correction_data) >> 8,
                                                 read_fmt(">H", correction_data) >> 8,
                                                 read_fmt(">H", correction_data) >> 8,
@@ -64,16 +58,6 @@ class Level():
 @define
 class ToneCurve():
     
-    @define
-    class CurvePoint:
-        input_point: int # TODO Default fields + validators
-        output_point: int
-
-    @define
-    class CurveList(list):
-        pass # TODO Add verifications when adding new points (32 max, insert in order, no same input value)
-
-
     RGB: CurveList
     Red: CurveList
     Green: CurveList
@@ -91,14 +75,14 @@ class ToneCurve():
         while correction_data.tell() < section_size + 8:
 
             points_count = read_fmt(">h", correction_data)
-           
+
             points = []  
             for _ in range(points_count):
-                point = ToneCurve.CurvePoint(read_fmt(">H", correction_data) >> 8, read_fmt(">H", correction_data) >> 8)
+                point = CurvePoint(read_fmt(">H", correction_data) >> 8, read_fmt(">H", correction_data) >> 8)
                 points.append(point)
 
             padding = correction_data.read(0x80 - (4 * points_count)) # Point count is limited to 32
-            
+
             curves.append(points)
 
         # There is only 4 meaningful point tables, no idea why there are more
@@ -173,7 +157,6 @@ class Posterization():
     def from_bytes(cls, correction_data):
         
         section_size = read_fmt(">i", correction_data)
-
         return cls(read_fmt(">i", correction_data))
 
 @define
@@ -197,7 +180,41 @@ class GradientMap():
 
     @classmethod
     def from_bytes(cls, correction_data):
-        logger.warning("Gradient Map correction not implemented")
+
+        section_size = read_fmt(">i", correction_data)
+
+        unk = read_fmt(">i", correction_data)
+        unk = read_fmt(">i", correction_data)
+        unk = read_fmt(">i", correction_data)
+
+        num_color_stop = read_fmt(">i", correction_data)
+        unk4 = read_fmt(">i", correction_data)
+
+        color_stops = []
+
+        # Same as parsing GradientData from gradients
+        for _ in range(num_color_stop):
+
+            r,g,b = (read_fmt(">I", correction_data) >> 24 for _ in range(3))
+            rgb = Color(r,g,b)
+
+            opacity = read_fmt(">I", correction_data) >> 24
+            is_current_color = read_fmt(">i", correction_data)
+            position = read_fmt(">i", correction_data) * 100 // 32768
+            num_curve_points = read_fmt(">i", correction_data)
+
+            curve_points = []
+
+            color_stops.append(ColorStop(rgb, opacity, is_current_color, position, num_curve_points, curve_points))
+
+        for color_stop in color_stops:
+            if color_stop.num_curve_points != 0:
+                for _ in range(color_stop.num_curve_points):
+                    point = CurvePoint(read_fmt(">d", correction_data), read_fmt(">d", correction_data))
+                    
+                    color_stop.curve_points.append(point)
+
+        
 
 def parse_correction_attributes(correction_attributes):
     
@@ -210,24 +227,24 @@ def parse_correction_attributes(correction_attributes):
 
     if correction_type == CorrectionType.LEVEL:
         return Level.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.TONE_CURVE:
         return ToneCurve.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.HSL:
         return HSL.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.COLOR_BALANCE:
         return ColorBalance.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.REVERSE_GRADIENT:
         return ReverseGradient.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.POSTERIZATION:
         return Posterization.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.THRESHOLD:
         return Threshold.from_bytes(correction_data)
-    
+
     if correction_type == CorrectionType.GRADIENT_MAP:
         return GradientMap.from_bytes(correction_data)

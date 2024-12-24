@@ -1,6 +1,6 @@
 from clip_tools.parsers import parse_effect_info
 
-class LayerEffect():
+class LayerEffects():
     
     def __init__(self, effect_data):
 
@@ -14,3 +14,7 @@ class LayerEffect():
         layer_infos = parse_effect_info(layer_effect_info)
 
         return cls(layer_infos)
+
+    @classmethod
+    def new(cls, effects):
+        pass
