@@ -36,9 +36,6 @@ class Gradient():
     def from_bytes(cls, gradation_fill_info):
 
         gradient_info = parse_gradient_info(gradation_fill_info)
-        
-        print(gradient_info["color_stops"])
-
         return cls(**gradient_info)
 
     @classmethod

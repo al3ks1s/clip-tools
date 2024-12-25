@@ -4,7 +4,7 @@ import zlib
 from PIL import Image
 from clip_tools.utils import read_fmt, read_csp_unicode_str
 
-from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape
+from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection
 from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, EffectTone, EffectEdge, Posterization, EffectTonePosterize, EffectWaterEdge, EffectLine
 
 from collections import namedtuple
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 def parse_offscreen_attribute(offscreen_attribute):
 
-    columns = ["header_size", "info_section_size", "extra_info_section_size", "u1", "bitmap_width", "bitmap_height", "block_grid_width", "block_grid_height", "pixel_packing_attributes", "u2", "default_fill_color", "u3", "u4", "u5", "u6", "block_count", "u7", "block_sizes"]
+    columns = ["header_size", "info_section_size", "extra_info_section_size", "u1", "bitmap_width", "bitmap_height", "block_grid_width", "block_grid_height", "pixel_packing_attributes", "u2", "default_fill_color", "u3", "other_init_color_count", "u5", "u6", "block_count", "u7", "block_sizes"]
 
     parameter_str = "Parameter".encode('UTF-16-BE')
     initcolor_str = "InitColor".encode('UTF-16-BE')
@@ -39,7 +39,7 @@ def parse_offscreen_attribute(offscreen_attribute):
     block_grid_width = read_fmt(">i", offscreen_io)
     block_grid_height = read_fmt(">i", offscreen_io)
 
-    #pixel_packing_names = ["ChannelBytes", "AlphaChannelCount", "BufferChannelCount", "TotalChannelCount", "BlockArea"]
+    #pixel_packing_names = ["ChannelBytes", "AlphaChannelCount", "BufferChannelCount", "TotalChannelCount", "unk1", ]
     pixel_packing_attributes = [read_fmt(">i", offscreen_io) for _i in range(16)]
 
     initcolor_size = read_fmt(">i", offscreen_io)
@@ -48,8 +48,12 @@ def parse_offscreen_attribute(offscreen_attribute):
     u2 = read_fmt(">i", offscreen_io)
     default_fill_color = read_fmt(">i", offscreen_io)
     u3 = read_fmt(">i", offscreen_io)
-    u4 = read_fmt(">i", offscreen_io)
+    other_init_colors_count = read_fmt(">i", offscreen_io) # ?
     u5 = read_fmt(">i", offscreen_io)
+
+    other_init_colors = []
+    for _ in range(other_init_colors_count):
+        other_init_colors.append(read_fmt(">i", offscreen_io))
     
     blocksize_size = read_fmt(">i", offscreen_io)
     assert offscreen_io.read(blocksize_size * 2) == blocksize_str
@@ -60,7 +64,7 @@ def parse_offscreen_attribute(offscreen_attribute):
 
     blocks_sizes = [read_fmt(">i", offscreen_io) for _i in range(block_count)]
     
-    values = [header_size, info_section_size, extra_info_section_size, u1, bitmap_width, bitmap_height, block_grid_width, block_grid_height, pixel_packing_attributes, u2, default_fill_color, u3, u4, u5, u6, block_count, u7, blocks_sizes]
+    values = [header_size, info_section_size, extra_info_section_size, u1, bitmap_width, bitmap_height, block_grid_width, block_grid_height, pixel_packing_attributes, u2, default_fill_color, u3, other_init_colors_count, u5, u6, block_count, u7, blocks_sizes]
     
     return namedtuple("mipAttributes", columns)(*values)
 
@@ -71,13 +75,12 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
         c_d = {
             3: "RGB",
             4: "RGBA",
+            5: "RGBA",
             1: "L",
             2: "LA"
         }
 
         return c_d.get(c_num)
-
-    #print(offscreen_attributes.pixel_packing_attributes)
 
     bit_depth = offscreen_attributes.pixel_packing_attributes[0] # See CanvasChannelBytes
 
@@ -85,40 +88,59 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
     buffer_channel_count = offscreen_attributes.pixel_packing_attributes[2] # Image buffer channel count
     total_channel_count = offscreen_attributes.pixel_packing_attributes[3] # Total channel count
 
-    block_area = offscreen_attributes.pixel_packing_attributes[4] # Block Area
+    buffer_block_byte_count = offscreen_attributes.pixel_packing_attributes[4]# Buffer block byte count dependant on bit depth (eg : 1-bit will be 8192)
 
-    if buffer_channel_count == 0:
-        return None
+    buffer_channel_count2 = offscreen_attributes.pixel_packing_attributes[5]
+    buffer_bit_depth = offscreen_attributes.pixel_packing_attributes[6] // 32 # Buffer bit depth (Per buffer block, need to divide by the number of channel) 
 
-    im = Image.new(channel_to_pil(buffer_channel_count), (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height), 255*offscreen_attributes.default_fill_color)
+    alpha_channel_count2 = offscreen_attributes.pixel_packing_attributes[7]
+    alpha_bit_depth = offscreen_attributes.pixel_packing_attributes[8] // 32
+
+    buffer_block_area = offscreen_attributes.pixel_packing_attributes[9]
+
+    block_width = offscreen_attributes.pixel_packing_attributes[10]
+    block_height = offscreen_attributes.pixel_packing_attributes[11]
+
+    unk1 = offscreen_attributes.pixel_packing_attributes[12] # Always 8
+    unk1 = offscreen_attributes.pixel_packing_attributes[13] # Always 8
+    monochrome = offscreen_attributes.pixel_packing_attributes[14] # Only changed to 1 when the layer was mono
+    unk1 = offscreen_attributes.pixel_packing_attributes[15] # Always 0
+
+    im = Image.new(channel_to_pil(total_channel_count), (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height), 255*offscreen_attributes.default_fill_color)
+
+    block_area = block_width * block_height
 
     for h in range(offscreen_attributes.block_grid_height):
         for w in range(offscreen_attributes.block_grid_width):
             block = chunk.block_datas[h * offscreen_attributes.block_grid_width + w]
+            
             block_res = b''
+            
             if block.data_present:
-                
+
                 pix_bytes = zlib.decompress(block.data)
+                
+                block_alpha = b''
+                block_buffer = b''
 
-                if buffer_channel_count == 4:
+                final_channels = []
 
-                    b_alpha = Image.frombuffer(channel_to_pil(1), (256,256), pix_bytes[:block_area])
-                    b_im = Image.frombuffer(channel_to_pil(4), (256,256), pix_bytes[block_area:])
+                if buffer_channel_count != 0:
+                    block_buffer = Image.frombuffer(channel_to_pil(buffer_channel_count), (block_width, block_height), pix_bytes[block_area * alpha_channel_count:block_area*(buffer_channel_count + alpha_channel_count)])
+                    buffer_channels = block_buffer.split()
 
-                    # Who thought it would be a good idea? why is a RGBA image over 5 chans, but in that order? with the alpha first then a buffer????
-                    b,g,r,_ = b_im.split()
-                    a, = b_alpha.split()
+                    block_buffer = buffer_channels[:3][::-1]
 
-                    b_bands = (r,g,b,a)
+                    final_channels.extend(block_buffer)
 
-                    #a = [Image.frombuffer("L", (256, 256), pix_bytes[i * block_area:block_area*(i+1)]) for i in range(c_count3)][::-1]
+                if alpha_channel_count != 0:
+                    block_alpha = Image.frombuffer(channel_to_pil(alpha_channel_count), (block_width, block_height), pix_bytes[:block_area * alpha_channel_count]).split()
+                    final_channels.extend(block_alpha)
+            
+                if len(final_channels) == 0:
+                    raise ValueError("No channels to merge in chunk decoding")
 
-                    block_res = Image.merge("RGBA", b_bands)
-
-                elif buffer_channel_count == 1:
-                    
-                    b_a = Image.frombuffer(channel_to_pil(1), (256, 256), pix_bytes[:block_area])
-                    block_res = Image.frombuffer(channel_to_pil(buffer_channel_count), (256, 256), pix_bytes[block_area:])
+                block_res = Image.merge(channel_to_pil(total_channel_count), final_channels)
 
                 im.paste(block_res, (256*w,256*h))
 
@@ -196,7 +218,6 @@ def parse_gradient_info(gradation_fill_info):
 
     return gradient_info
 
-
 def parse_effect_info(layer_effect_info):
 
     layer_effect_data = io.BytesIO(layer_effect_info)
@@ -212,16 +233,16 @@ def parse_effect_info(layer_effect_info):
 
         if param_name == "EffectEdge":
 
-            edge_enabled = read_fmt(">i", layer_effect_data)
+            edge_enabled = bool(read_fmt(">i", layer_effect_data))
             thickness = read_fmt(">d", layer_effect_data)
 
             rgb = [read_fmt(">I", layer_effect_data) >> 24 for _ in range(3)]
 
             effects[param_name] = EffectEdge(edge_enabled, thickness, rgb)
 
-        if param_name == "EffectTone":
+        elif param_name == "EffectTone":
 
-            screentone_enabled = read_fmt(">i", layer_effect_data)
+            screentone_enabled = bool(read_fmt(">i", layer_effect_data))
 
             resolution = read_fmt(">d", layer_effect_data)#?
 
@@ -246,28 +267,28 @@ def parse_effect_info(layer_effect_info):
 
             effects[param_name] = EffectTone(screentone_enabled, resolution, screentone_shape, use_image_brightness, frequency, angle, noise_size, noise_factor, position)
 
-        if param_name == "EffectTextureMap":
+        elif param_name == "EffectTextureMap":
             
             section_size = read_fmt(">i", layer_effect_data)
             layer_effect_data.read(section_size - 4)
 
             # Bypass
 
-        if param_name == "EffectApplyOpacity":
+        elif param_name == "EffectApplyOpacity":
             
             section_size = read_fmt(">i", layer_effect_data)
             apply_opacity_enabled = read_fmt(">i", layer_effect_data) # Enable layer reflect opacity
             
             effects[param_name] = apply_opacity_enabled
 
-        if param_name == "EffectToneAreaColor":
+        elif param_name == "EffectToneAreaColor":
             
             section_size = read_fmt(">i", layer_effect_data)
             layer_effect_data.read(section_size - 4)
 
             # Bypass
 
-        if param_name == "EffectTonePosterize":
+        elif param_name == "EffectTonePosterize":
 
             section_size = read_fmt(">i", layer_effect_data)
             posterize_enabled = read_fmt(">i", layer_effect_data)
@@ -283,7 +304,7 @@ def parse_effect_info(layer_effect_info):
 
             effects[param_name] = EffectTonePosterize(posterize_enabled, posterize_count, posterizations)
 
-        if param_name == "EffectWaterEdge":
+        elif param_name == "EffectWaterEdge":
 
             section_size = read_fmt(">i", layer_effect_data)
             water_edge_enabled = read_fmt(">i", layer_effect_data)
@@ -295,7 +316,7 @@ def parse_effect_info(layer_effect_info):
 
             effects[param_name] = EffectWaterEdge(water_edge_enabled, edge_range, edge_opacity, edge_darkness, edge_blurring)
 
-        if param_name == "EffectLine":
+        elif param_name == "EffectLine":
            
             section_size = read_fmt(">i", layer_effect_data)
             extract_line_enabled = bool(read_fmt(">i", layer_effect_data))
@@ -314,14 +335,15 @@ def parse_effect_info(layer_effect_info):
             unk = read_fmt(">d", layer_effect_data) # Thickness? Something else? Consistently 5.0
             unk = read_fmt(">i", layer_effect_data) # Consistently 0x04
 
-            directions_map = {0:"Left",1:"Top",2:"Right",3:"Bottom"}
-            directions = {}
+            directions_map = {0:ExtractLinesDirection.LEFT,1:ExtractLinesDirection.TOP,2:ExtractLinesDirection.RIGHT,3:ExtractLinesDirection.BOTTOM}
+            directions = ExtractLinesDirection(0)
             
             for _ in range(4):
                 direction = read_fmt(">i", layer_effect_data)
                 direction_enabled = bool(read_fmt(">i", layer_effect_data))
 
-                directions[directions_map[direction]] = direction_enabled
+                if direction_enabled:
+                    directions = directions | directions_map[direction]
 
             posterize_count = read_fmt(">i", layer_effect_data)
             posterizations = []
@@ -337,6 +359,9 @@ def parse_effect_info(layer_effect_info):
             unk = read_fmt(">i", layer_effect_data) # Consistently 0xc8
 
             effects[param_name] = EffectLine(extract_line_enabled, black_fill_enabled, black_fill_level, posterize_enabled, line_width, effect_threshold, directions, posterize_count, posterizations, anti_aliasing)
+
+        else:
+            logger.warning(f"Unknown param name {param_name} effect parsing, might be due to incorrect parsing")
 
     return effects
 

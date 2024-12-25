@@ -6,7 +6,7 @@ import io
 import logging
 from clip_tools.utils import read_fmt
 
-from clip_tools.data_classes import ColorStop, Color, Position, CurveList, CurvePoint, LevelCorrection
+from clip_tools.data_classes import ColorStop, Color, Position, CurveList, CurvePoint, LevelCorrection, Balance
 
 from collections import namedtuple
 
@@ -107,13 +107,6 @@ class HSL():
 @define
 class ColorBalance():
     
-    @define
-    class Balance():
-
-        Cyan: int # TODO Validators
-        Magenta: int
-        Yellow: int
-
     keep_brightness: bool
 
     shadows: Balance
@@ -130,9 +123,9 @@ class ColorBalance():
         
         keep_brightness = bool(read_fmt(">i", correction_data))
 
-        balance_shadow = ColorBalance.Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
-        balance_midtones = ColorBalance.Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
-        balance_highlight = ColorBalance.Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
+        balance_shadow = Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
+        balance_midtones = Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
+        balance_highlight = Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
 
         return cls(keep_brightness, balance_shadow, balance_midtones, balance_highlight)
 
@@ -175,6 +168,9 @@ class Threshold():
 @define
 class GradientMap():
     
+    num_color_stop: int
+    color_stops: []
+
     def to_bytes(self):
         pass
 
@@ -211,10 +207,9 @@ class GradientMap():
             if color_stop.num_curve_points != 0:
                 for _ in range(color_stop.num_curve_points):
                     point = CurvePoint(read_fmt(">d", correction_data), read_fmt(">d", correction_data))
-                    
                     color_stop.curve_points.append(point)
-
         
+        return cls(num_color_stop, color_stops)
 
 def parse_correction_attributes(correction_attributes):
     

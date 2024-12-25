@@ -6,6 +6,7 @@ from clip_tools.parsers import *
 from clip_tools.api.Gradient import Gradient
 from clip_tools.api.Effect import LayerEffects
 from clip_tools.api.Correction import parse_correction_attributes
+from clip_tools.data_classes import Color
 
 import io
 import zlib
@@ -38,23 +39,19 @@ class BaseLayer():
         self.mipmap_infos = self.clip_file.sql_database.get_referenced_items("MipmapInfo", "LayerId", self._data.MainId)
         self.offscreens = self.clip_file.sql_database.get_referenced_items("Offscreen", "LayerId", self._data.MainId)
 
-        self.effect = None
+        self.effects = None
         self.mask = None
-        self.ruler = None
+        self.rulers = None
 
         if self.has_effect or self._data.LayerEffectInfo is not None:
-            self.effect = LayerEffects.from_bytes(self._data.LayerEffectInfo)
+            self.effects = LayerEffects.from_bytes(self._data.LayerEffectInfo)
 
         if self.has_mask:
-            
+
             mask_offscreen_attribute = parse_offscreen_attribute(self._get_mask_offscreen_attributes())
             mask_offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
 
-            #print(mask_offscreen.BlockData)
-            #print(mask_offscreen_attribute)
-
-            im = decode_chunk_to_pil(self.clip_file.data_chunks[mask_offscreen.BlockData], mask_offscreen_attribute)
-            
+            self.mask = decode_chunk_to_pil(self.clip_file.data_chunks[mask_offscreen.BlockData], mask_offscreen_attribute)
 
         if self.has_ruler:
             pass
@@ -105,8 +102,8 @@ class BaseLayer():
         return self._data.LayerType & LayerType.PIXEL
 
     @property
-    def has_mask(self):
-        return self._data.LayerType & LayerType.MASKED
+    def has_mask(self): # Masks for FramesBorders work differently, the vector line defines the mask and the ruler
+        return self._data.LayerType & LayerType.MASKED # TODO: Modify this to include FRAMES, need to modify the mask initialization for frames, probably in subclass
 
     @property
     def has_effect(self):
@@ -114,7 +111,6 @@ class BaseLayer():
 
     @property
     def mask_type(self):
-        
         return LayerMasking(self._data.LayerMasking)
 
     @property
@@ -436,8 +432,11 @@ class Folder(FolderMixin, BaseLayer):
     def __init__(self, clip_file, layer_data):
 
         self._layers = []
-
         BaseLayer.__init__(self, clip_file, layer_data)
+
+    @property
+    def is_open(self):
+        return not self._data.LayerFolder & LayerFolder.CLOSED
 
 class RootFolder(Folder):
     pass
@@ -463,14 +462,15 @@ class PaperLayer(BaseLayer):
 
     # Special RenderType: 20
 
+    # TODO To move to Base Layer
     @property
     def color(self):
-        return (self._data.DrawColorMainRed >> 24,
+        return Color(self._data.DrawColorMainRed >> 24,
                 self._data.DrawColorMainGreen >> 24,
                 self._data.DrawColorMainBlue >> 24)
 
     @color.setter
-    def color(self, new_color):
+    def color(self, new_color: Color):
         pass
 
     @classmethod
@@ -545,10 +545,11 @@ class GradientLayer(BaseLayer):
     def __init__(self, clip_file, layer_data):
 
         BaseLayer.__init__(self, clip_file, layer_data)
-        print(self.LayerName)
+        #print(self.LayerName)
         self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
-        print("----------------------")
-        print()
+        #print(self.gradient)
+        #print("----------------------")
+        #print()
 
 
     @property

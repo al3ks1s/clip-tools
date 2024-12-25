@@ -3,6 +3,8 @@ from attrs import define
 
 from clip_tools.constants import GradientRepeatMode, GradientShape
 
+# TODO Write Methods that return bytes format
+
 @define
 class Position():
     x: float
@@ -44,6 +46,10 @@ class CurveList(list):
 class Posterization():
     posterize_input: int
     posterize_output: int
+
+@define
+class EffectApplyOpacity():
+    apply_opacity: bool
 
 @define
 class EffectEdge():
@@ -96,12 +102,9 @@ class EffectLine():
 
     anti_aliasing: bool
 
-"""
+@define
+class Balance():
 
-            nmt = namedtuple("EffectEdge", ["enabled", "thickness", "rgb"])
-            nmt = namedtuple("EffectTone", ["enabled", "resolution", "shape", "use_image_brightness", "frequency", "angle", "noise_size", "noise_factor", "position"])
-
-nmt = namedtuple("EffectTonePosterize", ["enabled", "posterization_counts", "posterizations"])
-nmt = namedtuple("EffectWaterEdge", ["enabled", "range", "opacity", "darkness", "blurring"])
-nmt = namedtuple("EffectLine", ["enabled", "black_fill_enabled", "black_fill_level", "posterize_enabled", "line_width", "effect_threshold", "directions", "posterize_count", "posterizations", "anti_aliasing"])
-"""
+    Cyan: int # TODO Validators
+    Magenta: int
+    Yellow: int

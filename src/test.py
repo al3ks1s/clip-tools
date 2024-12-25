@@ -12,7 +12,7 @@ import zlib
 workdir = '../tests/Samples'
 
 filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
-#filelist = ["Illustration-Corrections.clip"]
+filelist = ["Illustration-Frames.clip"]
 
 """
 
@@ -53,10 +53,14 @@ for f in filelist:
 
         for layer in proj.canvas.root_folder.descendants():
 
+            if layer.has_mask:
+                layer.mask.show()
+
             if isinstance(layer, PixelLayer):
                 
-                print("Showing layer", layer.LayerName)
+                pass#print("Showing layer", layer.LayerName)
                 
-                im = layer.topil()
+                #im = layer.topil()
                 #im.show()
                 #"""
+

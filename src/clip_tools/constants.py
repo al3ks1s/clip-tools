@@ -30,7 +30,7 @@ class LockSpecified(Enum):
 
 class CanvasChannelBytes(IntFlag):
     
-    MONOCHROME = 1
+    ALPHA = 1
     BW = 16
     RGB = 32
 
@@ -105,7 +105,7 @@ class LayerMasking(IntFlag):
     # 114, For Frame folders (MASK_AREA + UNK + Folder + Frame)
     MASK_ENABLED = 1
     MASK_AREA = 2
-    UNK = 16
+    UNK = 16 # Use Vector line as mask delimitation?
     FOLDER = 32
     FRAME = 64
     
