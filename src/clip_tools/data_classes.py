@@ -1,7 +1,7 @@
 from collections import namedtuple
 from attrs import define
 
-from clip_tools.constants import GradientRepeatMode, GradientShape
+from clip_tools.constants import GradientRepeatMode, GradientShape, TextJustify, TextStyle, TextOutline
 
 # TODO Write Methods that return bytes format
 
@@ -9,6 +9,13 @@ from clip_tools.constants import GradientRepeatMode, GradientShape
 class Position():
     x: float
     y: float
+
+@define
+class BBox():
+    x1: int
+    y1: int
+    x2: int
+    y2: int
 
 @define
 class Color():
@@ -108,3 +115,35 @@ class Balance():
     Cyan: int # TODO Validators
     Magenta: int
     Yellow: int
+
+@define
+class VectorPoint():
+
+    position: Position
+    thickness: int
+
+
+@define
+class TextRun():
+
+    start: int
+    length: int
+
+    style_flag: int
+    default_style_flag: int
+    color: Color
+    font_scale: float
+
+    font: str
+
+@define
+class TextParam():
+
+    attribute: int
+
+    start: int
+    length: int
+
+    value: int
+
+

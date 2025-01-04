@@ -7,6 +7,8 @@ from clip_tools.api.Gradient import Gradient
 from clip_tools.api.Effect import LayerEffects
 from clip_tools.api.Correction import parse_correction_attributes
 from clip_tools.data_classes import Color
+from clip_tools.api.Ruler import Rulers
+from clip_tools.api.Mask import Mask
 
 import io
 import zlib
@@ -47,14 +49,13 @@ class BaseLayer():
             self.effects = LayerEffects.from_bytes(self._data.LayerEffectInfo)
 
         if self.has_mask:
-
             mask_offscreen_attribute = parse_offscreen_attribute(self._get_mask_offscreen_attributes())
             mask_offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
 
-            self.mask = decode_chunk_to_pil(self.clip_file.data_chunks[mask_offscreen.BlockData], mask_offscreen_attribute)
+            self.mask = Mask(self, self.mask_type, mask_offscreen)
 
         if self.has_ruler:
-            pass
+            self.rulers = Rulers.init_rulers(self)
 
     @classmethod
     def from_db(cls, clip_file, layer_data):
@@ -82,6 +83,9 @@ class BaseLayer():
 
         if layer_data.TextLayerType is not None:
             return TextLayer(clip_file, layer_data)
+
+        if layer_data.AnimationFolder:
+            return AnimationFolder(clip_file, layer_data)
 
         if layer_data.LayerFolder & LayerFolder.FOLDER:
             return Folder(clip_file, layer_data)
@@ -157,7 +161,6 @@ class BaseLayer():
     def reference(self, refer):
         self._data.ReferLayer = bool(refer)
 
-
     @property
     def lock(self):
         return LayerLock(self._data.LayerLock)
@@ -170,18 +173,12 @@ class BaseLayer():
         self._data.LayerLock = 0
 
     def render_mask(self):
-        
-        print()
-        print(self.LayerName)
 
         if not self.has_mask:
             return None
 
         offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
-
         parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
-
-        print(self.clip_file.data_chunks[offscreen.BlockData].block_datas)
 
         return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
 
@@ -438,6 +435,11 @@ class Folder(FolderMixin, BaseLayer):
     def is_open(self):
         return not self._data.LayerFolder & LayerFolder.CLOSED
 
+
+    @classmethod
+    def new(cls):
+        pass
+
 class RootFolder(Folder):
     pass
 
@@ -491,6 +493,24 @@ class TextLayer(BaseLayer):
 
     # Text layers have no External chunk
 
+    def __init__(self, clip_file, layer_data):
+        BaseLayer.__init__(self, clip_file, layer_data)
+
+        attr_array = self._get_text_attributes_array()
+        text_array = self._get_strings_array()
+
+        #print(self.LayerName)
+
+        for attr, stri in zip(attr_array, text_array):
+            #print(stri)
+            parse_text_attribute(attr)
+
+        #print()
+
+    @property
+    def texts(self):
+        pass
+
     @property
     def text(self):
         return self._data.TextLayerString
@@ -519,6 +539,36 @@ class TextLayer(BaseLayer):
     def color(self):
         pass
 
+    def _get_strings_array(self):
+
+        array = [self._data.TextLayerString]
+
+        if self._data.TextLayerStringArray is not None:
+            array.extend(self._split_array(self._data.TextLayerStringArray))
+
+        return array
+
+    def _get_text_attributes_array(self):
+        array = [self._data.TextLayerAttributes]
+
+        if self._data.TextLayerAttributesArray is not None:
+            array.extend(self._split_array(self._data.TextLayerAttributesArray))
+
+        return array
+
+    def _split_array(self, array):
+        
+        data = io.BytesIO(array)
+
+        arr = []
+
+        while data.tell() < len(array):
+
+            length = read_fmt("<i", data)
+
+            arr.append(data.read(length))
+
+        return arr
 
 class CorrectionLayer(BaseLayer):
 
@@ -533,7 +583,15 @@ class CorrectionLayer(BaseLayer):
 
         BaseLayer.__init__(self, clip_file, layer_data)
         self.correction = parse_correction_attributes(self._data.FilterLayerInfo)
+        """
+        print(self.LayerName)
+        print(self.correction)
+        print()
+        #"""
 
+    @classmethod
+    def new(cls):
+        pass
 
 class GradientLayer(BaseLayer):
 
@@ -545,12 +603,13 @@ class GradientLayer(BaseLayer):
     def __init__(self, clip_file, layer_data):
 
         BaseLayer.__init__(self, clip_file, layer_data)
-        #print(self.LayerName)
         self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
-        #print(self.gradient)
-        #print("----------------------")
-        #print()
 
+        """
+        print(self.LayerName)
+        print(self.gradient)
+        print()
+        #"""
 
     @property
     def shape(self):
@@ -559,7 +618,7 @@ class GradientLayer(BaseLayer):
     @property
     def repeat_mode(self):
         return self.gradient.repeat_mode
-    
+
     @property
     def anti_aliasing(self):
         return self.gradient.anti_aliasing
@@ -567,11 +626,10 @@ class GradientLayer(BaseLayer):
     @property
     def start(self):
         return self.gradient.start
-    
+
     @property
     def end(self):
         return self.gradient.end
-            
 
 class VectorLayer(BaseLayer):
 
@@ -582,11 +640,21 @@ class VectorLayer(BaseLayer):
     # Vector Normal Type : 0
     # External data index in VectorNormalStrokeIndex
 
-    pass
+    def __init__(self, clip_file, layer_data):
 
+        BaseLayer.__init__(self, clip_file, layer_data)
+
+        vector_chunks = self.clip_file.sql_database.get_referenced_items("VectorObjectList", "LayerId", self._data.MainId)
+
+        print(self.LayerName)
+        for vector_chunk in vector_chunks.values():
+            print(vector_chunk.VectorData)
+            parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
+            #pass
+        #logger.warning("Vector layer not yet implemented")
 
 class FrameLayer(Folder, VectorLayer):
-    
+
     # Frame Border BaseLayer, Typelayer : 0
     # Special vector folder
 
@@ -600,25 +668,28 @@ class FrameLayer(Folder, VectorLayer):
         self._layers = []
         VectorLayer.__init__(self, clip_file, layer_data)
 
+class AnimationFolder(Folder):
+    pass
+
 class StreamLineLayer(VectorLayer):
-    
+
     # Defines speedlines layers, LayerType : 0
     # Definition data in StreamLine table, index in the StreamLineIndex column
     # Has vectorized external data, seems to be an Adobe Photoshop Color swatch data
-    
+
     # VectorNormalType: 2
     # External data index in VectorNormalStrokeIndex
 
     pass
 
 class Layer_3D(BaseLayer):
-    
+
     # Three dimmension layer has a LayerType of 0
     # Specific data starts at Manager3DOd
     # LayerObject table holds the additional light/camera data for the 3D layers
     # 3D Scene data in Manager3DOd table
     # Has external data, Data starts by the signature "_STUDIO_3D_DATA2"
-    
+
     # Additional metadata in SpecialRulerManager, RulerVanishPoint, RulerPerspective, 
 
     pass

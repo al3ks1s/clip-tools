@@ -1,17 +1,15 @@
 from attrs import define
 from clip_tools.parsers import parse_gradient_info
 from clip_tools.constants import GradientRepeatMode, GradientShape
+from clip_tools.data_classes import Position, Color
 
 from collections import namedtuple
-
-Position = namedtuple("Position", ["x", "y"])
-Color = namedtuple("Color", ["r", "g", "b"])
 
 @define
 class Gradient():
 
     color_stops: list
-    
+
     repeat_mode: GradientRepeatMode
     shape: GradientShape
 
@@ -26,7 +24,6 @@ class Gradient():
     end: Position
 
     is_flat: bool
-
     fill_color: Color
 
     def to_bytes(self):

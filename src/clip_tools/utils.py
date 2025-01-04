@@ -55,6 +55,20 @@ def read_csp_unicode_str(size_fmt, f):
     string_data = f.read(2 * str_size)
     return string_data.decode('UTF-16-BE')
 
+def read_csp_unicode_le_str(size_fmt, f):
+    str_size = read_fmt(size_fmt, f)  
+    if str_size == None:
+        return None
+    string_data = f.read(2 * str_size)
+    return string_data.decode('UTF-16-LE')
+
+def read_csp_str(size_fmt, f):
+    str_size = read_fmt(size_fmt, f)  
+    if str_size == None:
+        return None
+    string_data = f.read(str_size)
+    return string_data.decode('UTF-8')
+
 def pack(fmt, *args):
     fmt = str(">" + fmt)
     return struct.pack(fmt, *args)

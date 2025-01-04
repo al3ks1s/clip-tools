@@ -1,17 +1,17 @@
 import attr
 
 class ClipData():
-    
+
     def write_to_db(self, db):
-        
+
         # TODO: Alter the table on the go for each new not None attribute at insertion or update.
-        
+
         pass
 
 
 @attr.define
-class Offscreen():
-    # Class with 4 possible columns
+class Offscreen(ClipData):
+    # Class with 4 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -20,8 +20,8 @@ class Offscreen():
 
 
 @attr.define
-class VOffscreen():
-    # Class with 35 possible columns
+class VOffscreen(ClipData):
+    # Class with 35 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -61,8 +61,8 @@ class VOffscreen():
 
 
 @attr.define
-class MipmapInfo():
-    # Class with 5 possible columns
+class MipmapInfo(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -72,8 +72,8 @@ class MipmapInfo():
 
 
 @attr.define
-class Mipmap():
-    # Class with 4 possible columns
+class Mipmap(ClipData):
+    # Class with 4 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -82,8 +82,8 @@ class Mipmap():
 
 
 @attr.define
-class LayerThumbnail():
-    # Class with 42 possible columns
+class LayerThumbnail(ClipData):
+    # Class with 42 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -130,8 +130,8 @@ class LayerThumbnail():
 
 
 @attr.define
-class Layer():
-    # Class with 185 possible columns
+class Layer(ClipData):
+    # Class with 185 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerName: str = None
@@ -331,8 +331,8 @@ class Layer():
 
 
 @attr.define
-class LayerObject():
-    # Class with 20 possible columns
+class LayerObject(ClipData):
+    # Class with 20 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -357,8 +357,8 @@ class LayerObject():
 
 
 @attr.define
-class CameraInfo():
-    # Class with 40 possible columns
+class CameraInfo(ClipData):
+    # Class with 40 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -403,8 +403,8 @@ class CameraInfo():
 
 
 @attr.define
-class CameraNodeInfo():
-    # Class with 4 possible columns
+class CameraNodeInfo(ClipData):
+    # Class with 4 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -413,8 +413,8 @@ class CameraNodeInfo():
 
 
 @attr.define
-class CharacterInfo():
-    # Class with 4 possible columns
+class CharacterInfo(ClipData):
+    # Class with 4 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -423,8 +423,8 @@ class CharacterInfo():
 
 
 @attr.define
-class DessinDollInfo():
-    # Class with 4 possible columns
+class DessinDollInfo(ClipData):
+    # Class with 4 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -433,8 +433,8 @@ class DessinDollInfo():
 
 
 @attr.define
-class RoomInfo():
-    # Class with 4 possible columns
+class RoomInfo(ClipData):
+    # Class with 4 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -443,8 +443,8 @@ class RoomInfo():
 
 
 @attr.define
-class SmallObjectInfo():
-    # Class with 5 possible columns
+class SmallObjectInfo(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -454,8 +454,8 @@ class SmallObjectInfo():
 
 
 @attr.define
-class PrimitiveInfo():
-    # Class with 5 possible columns
+class PrimitiveInfo(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -465,8 +465,8 @@ class PrimitiveInfo():
 
 
 @attr.define
-class LightInfo():
-    # Class with 6 possible columns
+class LightInfo(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -477,8 +477,8 @@ class LightInfo():
 
 
 @attr.define
-class FolderInfo():
-    # Class with 6 possible columns
+class FolderInfo(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -489,8 +489,8 @@ class FolderInfo():
 
 
 @attr.define
-class VectorObjectList():
-    # Class with 3 possible columns
+class VectorObjectList(ClipData):
+    # Class with 3 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -498,8 +498,8 @@ class VectorObjectList():
 
 
 @attr.define
-class Manager3D():
-    # Class with 46 possible columns
+class Manager3D(ClipData):
+    # Class with 46 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -550,8 +550,8 @@ class Manager3D():
 
 
 @attr.define
-class ModelInfo3D():
-    # Class with 48 possible columns
+class ModelInfo3D(ClipData):
+    # Class with 48 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -604,8 +604,8 @@ class ModelInfo3D():
 
 
 @attr.define
-class ModelNodeInfo3D():
-    # Class with 16 possible columns
+class ModelNodeInfo3D(ClipData):
+    # Class with 16 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -626,8 +626,8 @@ class ModelNodeInfo3D():
 
 
 @attr.define
-class Manager3DOd():
-    # Class with 21 possible columns
+class Manager3DOd(ClipData):
+    # Class with 21 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -653,8 +653,8 @@ class Manager3DOd():
 
 
 @attr.define
-class RulerParallel():
-    # Class with 7 possible columns
+class RulerParallel(ClipData):
+    # Class with 7 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -666,8 +666,8 @@ class RulerParallel():
 
 
 @attr.define
-class RulerCurveParallel():
-    # Class with 6 possible columns
+class RulerCurveParallel(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -678,8 +678,8 @@ class RulerCurveParallel():
 
 
 @attr.define
-class RulerMultiCurve():
-    # Class with 9 possible columns
+class RulerMultiCurve(ClipData):
+    # Class with 9 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -693,8 +693,8 @@ class RulerMultiCurve():
 
 
 @attr.define
-class RulerEmit():
-    # Class with 6 possible columns
+class RulerEmit(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -705,8 +705,8 @@ class RulerEmit():
 
 
 @attr.define
-class RulerCurveEmit():
-    # Class with 6 possible columns
+class RulerCurveEmit(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -717,8 +717,8 @@ class RulerCurveEmit():
 
 
 @attr.define
-class RulerConcentricCircle():
-    # Class with 9 possible columns
+class RulerConcentricCircle(ClipData):
+    # Class with 9 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -732,8 +732,8 @@ class RulerConcentricCircle():
 
 
 @attr.define
-class RulerGuide():
-    # Class with 7 possible columns
+class RulerGuide(ClipData):
+    # Class with 7 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -745,8 +745,8 @@ class RulerGuide():
 
 
 @attr.define
-class RulerVanishPoint():
-    # Class with 10 possible columns
+class RulerVanishPoint(ClipData):
+    # Class with 10 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -761,8 +761,8 @@ class RulerVanishPoint():
 
 
 @attr.define
-class RulerPerspective():
-    # Class with 15 possible columns
+class RulerPerspective(ClipData):
+    # Class with 15 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -782,8 +782,8 @@ class RulerPerspective():
 
 
 @attr.define
-class RulerSymmetry():
-    # Class with 9 possible columns
+class RulerSymmetry(ClipData):
+    # Class with 9 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -797,8 +797,8 @@ class RulerSymmetry():
 
 
 @attr.define
-class SpecialRulerManager():
-    # Class with 11 possible columns
+class SpecialRulerManager(ClipData):
+    # Class with 11 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -814,8 +814,8 @@ class SpecialRulerManager():
 
 
 @attr.define
-class StreamLine():
-    # Class with 46 possible columns
+class StreamLine(ClipData):
+    # Class with 46 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -866,8 +866,8 @@ class StreamLine():
 
 
 @attr.define
-class SpeechSynthesis():
-    # Class with 25 possible columns
+class SpeechSynthesis(ClipData):
+    # Class with 25 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     LayerId: int = None
@@ -897,8 +897,8 @@ class SpeechSynthesis():
 
 
 @attr.define
-class Canvas():
-    # Class with 132 possible columns
+class Canvas(ClipData):
+    # Class with 132 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasUnit: int = None
     CanvasWidth: float = None
@@ -1041,8 +1041,8 @@ class Canvas():
 
 
 @attr.define
-class BrushEffectorGraphData():
-    # Class with 5 possible columns
+class BrushEffectorGraphData(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1052,8 +1052,8 @@ class BrushEffectorGraphData():
 
 
 @attr.define
-class BrushPatternImage():
-    # Class with 5 possible columns
+class BrushPatternImage(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1063,8 +1063,8 @@ class BrushPatternImage():
 
 
 @attr.define
-class BrushPatternStyle():
-    # Class with 7 possible columns
+class BrushPatternStyle(ClipData):
+    # Class with 7 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1076,8 +1076,8 @@ class BrushPatternStyle():
 
 
 @attr.define
-class BrushFixedSpray():
-    # Class with 5 possible columns
+class BrushFixedSpray(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1087,8 +1087,8 @@ class BrushFixedSpray():
 
 
 @attr.define
-class BrushStyle():
-    # Class with 65 possible columns
+class BrushStyle(ClipData):
+    # Class with 65 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1159,8 +1159,8 @@ class BrushStyle():
 
 
 @attr.define
-class FillStyle():
-    # Class with 6 possible columns
+class FillStyle(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1171,8 +1171,8 @@ class FillStyle():
 
 
 @attr.define
-class BrushStyleManager():
-    # Class with 8 possible columns
+class BrushStyleManager(ClipData):
+    # Class with 8 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     FirstGraphData: int = None
@@ -1185,16 +1185,16 @@ class BrushStyleManager():
 
 
 @attr.define
-class ModelData3D():
-    # Class with 2 possible columns
+class ModelData3D(ClipData):
+    # Class with 2 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     Layer3DModelData: bytes = None
 
 
 @attr.define
-class TimeLapseBlob():
-    # Class with 7 possible columns
+class TimeLapseBlob(ClipData):
+    # Class with 7 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1206,8 +1206,8 @@ class TimeLapseBlob():
 
 
 @attr.define
-class TimeLapseRecord():
-    # Class with 5 possible columns
+class TimeLapseRecord(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     NextIndex: int = None
@@ -1217,16 +1217,16 @@ class TimeLapseRecord():
 
 
 @attr.define
-class TimeLapseManager():
-    # Class with 2 possible columns
+class TimeLapseManager(ClipData):
+    # Class with 2 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     RecordFirstIndex: int = None
 
 
 @attr.define
-class CanvasPreview():
-    # Class with 5 possible columns
+class CanvasPreview(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     ImageType: int = None
@@ -1236,8 +1236,8 @@ class CanvasPreview():
 
 
 @attr.define
-class CanvasNode():
-    # Class with 23 possible columns
+class CanvasNode(ClipData):
+    # Class with 23 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     Name: str = None
     NextIndex: int = None
@@ -1265,8 +1265,8 @@ class CanvasNode():
 
 
 @attr.define
-class CanvasItem():
-    # Class with 20 possible columns
+class CanvasItem(ClipData):
+    # Class with 20 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     ItemNextItemMainIndex: int = None
@@ -1291,8 +1291,8 @@ class CanvasItem():
 
 
 @attr.define
-class CanvasItemBinary():
-    # Class with 3 possible columns
+class CanvasItemBinary(ClipData):
+    # Class with 3 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     ItemId: int = None
@@ -1300,8 +1300,8 @@ class CanvasItemBinary():
 
 
 @attr.define
-class Canvas3DModelLoader():
-    # Class with 5 possible columns
+class Canvas3DModelLoader(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     ModelData: bytes = None
@@ -1311,8 +1311,8 @@ class Canvas3DModelLoader():
 
 
 @attr.define
-class Canvas3DModelBank():
-    # Class with 3 possible columns
+class Canvas3DModelBank(ClipData):
+    # Class with 3 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     BankData: bytes = None
@@ -1320,16 +1320,16 @@ class Canvas3DModelBank():
 
 
 @attr.define
-class CanvasItemBank():
-    # Class with 2 possible columns
+class CanvasItemBank(ClipData):
+    # Class with 2 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankRootItemMainIndex: int = None
     ModelBankMainIndex: int = None
 
 
 @attr.define
-class Track():
-    # Class with 18 possible columns
+class Track(ClipData):
+    # Class with 18 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     ItemId: int = None
@@ -1352,8 +1352,8 @@ class Track():
 
 
 @attr.define
-class TimeLineLabel():
-    # Class with 8 possible columns
+class TimeLineLabel(ClipData):
+    # Class with 8 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     ItemId: int = None
@@ -1366,8 +1366,8 @@ class TimeLineLabel():
 
 
 @attr.define
-class TimeLine():
-    # Class with 14 possible columns
+class TimeLine(ClipData):
+    # Class with 14 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     NextTimeLine: int = None
@@ -1386,8 +1386,8 @@ class TimeLine():
 
 
 @attr.define
-class SituationCast():
-    # Class with 10 possible columns
+class SituationCast(ClipData):
+    # Class with 10 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     BankId: int = None
@@ -1402,8 +1402,8 @@ class SituationCast():
 
 
 @attr.define
-class SituationSet():
-    # Class with 6 possible columns
+class SituationSet(ClipData):
+    # Class with 6 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     CanvasId: int = None
     BankId: int = None
@@ -1414,8 +1414,8 @@ class SituationSet():
 
 
 @attr.define
-class Scenario():
-    # Class with 32 possible columns
+class Scenario(ClipData):
+    # Class with 32 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     BankId: int = None
     NextTimeLine: int = None
@@ -1452,8 +1452,8 @@ class Scenario():
 
 
 @attr.define
-class AnimationCutBank():
-    # Class with 5 possible columns
+class AnimationCutBank(ClipData):
+    # Class with 5 attributes
     MainId: int = None # The param scheme doesn't necessarily have a MainId
     FirstTimeLine: int = None
     FirstScenario: int = None
@@ -1463,8 +1463,8 @@ class AnimationCutBank():
 
 
 @attr.define
-class Project():
-    # Class with 89 possible columns
+class Project(ClipData):
+    # Class with 89 attributes
     ProjectCanvas: int = None
     ProjectItemBank: int = None
     ProjectCutBank: int = None

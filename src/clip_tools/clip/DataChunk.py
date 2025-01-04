@@ -54,6 +54,7 @@ class BlockData:
 
         return cls(block_data_size, block_data_text_size, block_data_index, data_present, data)
 
+
 class BlockDatas(list):
     
     block_status = []
@@ -106,7 +107,9 @@ class BlockDatas(list):
                     blocks.block_checksums.append(read_fmt(">i", fp))
                 
             else:
-                break
+
+                fp.seek(0)
+                return fp.read()
 
         return blocks
 

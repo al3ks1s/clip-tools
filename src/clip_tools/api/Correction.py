@@ -120,12 +120,20 @@ class ColorBalance():
     def from_bytes(cls, correction_data):
 
         section_size = read_fmt(">i", correction_data)
-        
+
         keep_brightness = bool(read_fmt(">i", correction_data))
 
-        balance_shadow = Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
-        balance_midtones = Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
-        balance_highlight = Balance(read_fmt(">i", correction_data), read_fmt(">i", correction_data), read_fmt(">i", correction_data))
+        balance_shadow = Balance(read_fmt(">i", correction_data),
+                                    read_fmt(">i", correction_data),
+                                    read_fmt(">i", correction_data))
+
+        balance_midtones = Balance(read_fmt(">i", correction_data),
+                                    read_fmt(">i", correction_data),
+                                    read_fmt(">i", correction_data))
+
+        balance_highlight = Balance(read_fmt(">i", correction_data),
+                                    read_fmt(">i", correction_data),
+                                    read_fmt(">i", correction_data))
 
         return cls(keep_brightness, balance_shadow, balance_midtones, balance_highlight)
 
@@ -179,12 +187,14 @@ class GradientMap():
 
         section_size = read_fmt(">i", correction_data)
 
-        unk = read_fmt(">i", correction_data)
-        unk = read_fmt(">i", correction_data)
-        unk = read_fmt(">i", correction_data)
+        unk1 = read_fmt(">i", correction_data)
+        unk2 = read_fmt(">i", correction_data)
+        unk3 = read_fmt(">i", correction_data)
 
         num_color_stop = read_fmt(">i", correction_data)
         unk4 = read_fmt(">i", correction_data)
+
+        #print((unk1, unk2, unk3, unk4))
 
         color_stops = []
 
@@ -208,11 +218,11 @@ class GradientMap():
                 for _ in range(color_stop.num_curve_points):
                     point = CurvePoint(read_fmt(">d", correction_data), read_fmt(">d", correction_data))
                     color_stop.curve_points.append(point)
-        
+
         return cls(num_color_stop, color_stops)
 
 def parse_correction_attributes(correction_attributes):
-    
+
     correction_data = io.BytesIO(correction_attributes)
 
     correction_type = read_fmt(">i", correction_data)

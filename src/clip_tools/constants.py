@@ -140,15 +140,12 @@ class VectorNormalType(IntEnum):
 class EffectRenderType(IntEnum):
     pass
 
-class TextAttribute(IntEnum):
-    pass
 
 class GradientRepeatMode(IntEnum):
     CLIP = 0
     REPEAT = 1
     MIRROR = 2
     EMPTY = 3
-
 
 class GradientShape(IntEnum):
     LINEAR = 0
@@ -187,3 +184,100 @@ class ScreenToneShape(IntEnum):
     HEART = 22
     CLUBS = 23
     SPADES = 24
+
+class RulerRange(IntEnum):
+    ALL_LAYERS = 0
+    ONLY_FOLDER = 1
+    ONLY_TARGET = 2
+
+class TextAttribute(IntEnum):
+
+    RUNS = 11
+    ALIGN = 12
+    LINE_SPACING = 13
+    CHARACTER_SPACING = 14
+    UNDERLINE = 16
+    OUTLINE = 18
+    STRIKE = 20
+
+    ASPECT_RATIO = 26
+    CONDENSE_TEXT = 27
+
+    FONT = 31
+    FONT_SIZE = 32
+    GLOBAL_STYLE = 33
+    GLOBAL_COLOR = 34
+    GLOBAL_JUSTIFY = 35
+
+    ABSOLUTE_SPACING = 37
+    HORZ_IN_VERT = 38
+
+    BBOX = 42
+
+    READING_SETTING = 47
+    ANTI_ALIASING = 48
+
+    TEXT_ID = 50
+
+    HALF_WIDTH_PUNCT = 52
+
+    WRAP_FRAME = 53
+    WRAP_DIRECTION = 55
+    
+    BACKGROUND = 54
+    EDGE = 56
+
+    FONTS = 57
+
+    ROTATION_ANGLE = 58
+
+    SKEW_ANGLE_1 = 59
+    SKEW_ANGLE_2 = 60
+
+    BOX_SIZE = 63
+    QUAD_VERTS = 64
+
+class TextJustify(IntEnum):
+    LEFT = 0
+    RIGHT = 1
+    CENTER = 2
+
+class TextStyle(IntFlag):
+    BOLD = 1
+    ITALIC = 2
+    UNDERLINE = 4
+    STRIKEOUT = 8
+    VERTICAL = 16
+
+class TextOutline(IntEnum):
+    NONE = 0
+    LIGHT = 1
+    BOLD = 2
+
+class TextWrapDirection(IntEnum):
+    TOP = 0
+    CENTER = 1
+    BOTTOM = 2
+
+
+class VectorFlag(IntFlag):
+    pass
+    """
+    UNK = 1
+    UNK = 2
+    UNK = 4
+    UNK = 8
+    UNK = 16
+    UNK = 32
+
+    UNK = 4096
+    UNK = 8192
+    #"""
+
+class PointVectorFlag(IntFlag):
+    CORNER = 1
+    FRAME = 2 # for a frame or to define mask?
+
+    SPEEDLINE = 512
+
+    unk_THICKNESS_CHANGED = 4096

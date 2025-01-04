@@ -37,7 +37,7 @@ class Database:
             if row[1] not in self.param_scheme.keys():
                 self.param_scheme[row[1]] = {}
 
-            self.param_scheme[row[1]][row[2]] = { k:v for k,v in zip(self.table_scheme["ParamScheme"][3:], row[3:]) }
+            self.param_scheme[row[1]][row[2]] = dict(zip(self.table_scheme["ParamScheme"][3:], row[3:]))
 
     def init_db(self):
         pass
@@ -68,7 +68,6 @@ class Database:
             return None # Raise an exception
 
         return self._map_results(self._execute_query(f"Select * from {table} where {column}=={value}"), table)
-
 
     def create_table(self, table):
         pass
