@@ -12,7 +12,7 @@ import zlib
 workdir = '../tests/Samples'
 
 filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
-filelist = ["Illustration-Vector.clip"]
+#filelist = ["Illustration-Speedlines.clip"]
 
 """
 

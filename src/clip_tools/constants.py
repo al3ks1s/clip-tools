@@ -274,10 +274,16 @@ class VectorFlag(IntFlag):
     UNK = 8192
     #"""
 
-class PointVectorFlag(IntFlag):
+class VectorPointFlag(IntFlag):
     CORNER = 1
     FRAME = 2 # for a frame or to define mask?
 
     SPEEDLINE = 512
 
     unk_THICKNESS_CHANGED = 4096
+
+class AntiAliasing(IntEnum):
+    NONE = 0
+    WEAK = 1
+    MEDIUM = 2
+    STRONG = 3

@@ -5,7 +5,7 @@ from PIL import Image
 from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str
 
 from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextJustify, TextStyle, TextOutline, TextWrapDirection
-from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, EffectTone, EffectEdge, Posterization, EffectTonePosterize, EffectWaterEdge, EffectLine, VectorPoint, TextRun, TextParam, BBox
+from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, EffectTone, EffectEdge, Posterization, EffectTonePosterize, EffectWaterEdge, EffectLine, VectorPoint, VectorLine, TextRun, TextParam, BBox
 
 from collections import namedtuple
 
@@ -796,11 +796,12 @@ def parse_point_data(point_data):
 
 def parse_vector(vector_blob):
 
-    new_vector_signature = b'\x00\x00\x00\x58\x00\x00\x00\x48\x00\x00\x00\x58\x00\x00\x00\x58'
-
     vector_data = io.BytesIO(vector_blob)
 
+    vector_lines = []
+
     while vector_data.tell() < len(vector_blob) - 16:
+
         # Header, holds section size info
         header_size = read_fmt(">i", vector_data) # Full Header section size
         sign2 = read_fmt(">i", vector_data) # Point section size without the point size (16 bytes)
@@ -814,76 +815,108 @@ def parse_vector(vector_blob):
         #print("Vector header:", (header_size, sign2, point_size, sign4))
 
         num_points = read_fmt(">i", vector_data)
-        #print("Number of points:", num_points)
 
         vector_flag = read_fmt(">i", vector_data)
-        #print("Vector flag:", vector_flag)
 
         vector_bbox = BBox(read_fmt(">i", vector_data),
                             read_fmt(">i", vector_data),
                             read_fmt(">i", vector_data),
                             read_fmt(">i", vector_data))
-        #print(vector_bbox)
 
-        color = Color(read_fmt(">I", vector_data) >> 24,
+        main_color = Color(read_fmt(">I", vector_data) >> 24,
                 read_fmt(">I", vector_data) >> 24,
                 read_fmt(">I", vector_data) >> 24)
-        #print(color)
 
-        second_color = Color(read_fmt(">I", vector_data) >> 24,
+        sub_color = Color(read_fmt(">I", vector_data) >> 24,
                 read_fmt(">I", vector_data) >> 24,
                 read_fmt(">I", vector_data) >> 24)
-        #print(second_color)
 
         global_opacity = read_fmt(">d", vector_data)
-        #print(global_opacity)
         
         brush_id = read_fmt(">i", vector_data)
-        #print(brush_id)
 
         if brush_id == 1040:
             frame_brush_id = read_fmt(">i", vector_data)
-            frame_brush_id2 = read_fmt(">i", vector_data)
-            #print(u1, u2)
+            maybe_fill_style_id = read_fmt(">i", vector_data)
 
-        default_brush_size = read_fmt(">d", vector_data)
-        #print(default_brush_size)
+        brush_radius = read_fmt(">d", vector_data)
 
-        last_value = read_fmt(">i", vector_data)
-        #print(last_value)
+        last_value_unk = read_fmt(">i", vector_data)
 
-        #print("______________")
+        points = []
 
         for _ in range(num_points):
-            
+
             pos = Position(read_fmt(">d", vector_data), read_fmt(">d", vector_data))
-            #print(pos)
-    
+
             point_bbox = BBox(read_fmt(">i", vector_data),
                                 read_fmt(">i", vector_data),
                                 read_fmt(">i", vector_data),
                                 read_fmt(">i", vector_data))
-            #print(point_bbox)
             
             point_vector_flag = read_fmt(">i", vector_data)
-            #print("Point flag:", point_vector_flag)
-            #"""
-            remaining_point_size = point_size - (2*8) - (2*8) - 4
 
-            #print(binascii.hexlify(vector_data.read(remaining_point_size)))
+            # For testing
+            remaining_point_size = point_size - (2*8) - (2*8) -4-4-4-4-4-4-4-4-4-4-4-4-4-4
+            
+            point_scale = read_fmt(">f", vector_data)
+            point_scale_2 = read_fmt(">f", vector_data)
+            point_scale_3 = read_fmt(">f", vector_data)
 
-            #"""
+            unk = read_fmt(">f", vector_data)
+            unk = read_fmt(">f", vector_data)
+
+            point_width = read_fmt(">f", vector_data)
+            point_opacity = read_fmt(">f", vector_data)
+
+            # Only zeros?
+            unk = read_fmt(">f", vector_data)
+            unk = read_fmt(">f", vector_data)
+            unk = read_fmt(">f", vector_data)
+
+            # Unknown non zero parameter
+            unk = read_fmt(">f", vector_data)
+            unk = read_fmt(">i", vector_data)
+
+            # Only zeros
+            unk = read_fmt(">i", vector_data)
+
+            if vector_flag & 32:
+                
+                # Speedline startpoint?
+                unk = read_fmt(">d", vector_data)
+                #print(unk)
+                
+                unk = read_fmt(">d", vector_data)
+                #print(unk)
+                
+                remaining_point_size -= 16
+
+            # For testing
             point_params = []
             for _ in range(remaining_point_size // 4):
-                point_params.append(read_fmt(">i", vector_data))
+                point_params.append(read_fmt(">i", vector_data))            
+            if len(point_params) != 0:
+                logger.debug(f"Found new vector parameters : {point_params}")
 
-            print(point_params)
-            #"""
 
-            #print("______________")
+            points.append(VectorPoint(pos,
+                                        point_bbox,
+                                        point_vector_flag,
+                                        point_scale,
+                                        point_scale_2,
+                                        point_scale_3,
+                                        point_width,
+                                        point_opacity))
 
-        #print("---------------------")
-        #print("Current index:", hex(vector_data.tell()), "Remaining size:", hex(len(vector_blob) - vector_data.tell()))
-        #print()
+        vector_lines.append(VectorLine(num_points,
+                                        vector_flag,
+                                        vector_bbox,
+                                        main_color,
+                                        sub_color,
+                                        global_opacity,
+                                        brush_id,
+                                        brush_radius,
+                                        points))
 
-    return
+    return vector_lines

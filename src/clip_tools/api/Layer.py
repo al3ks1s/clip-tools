@@ -646,12 +646,9 @@ class VectorLayer(BaseLayer):
 
         vector_chunks = self.clip_file.sql_database.get_referenced_items("VectorObjectList", "LayerId", self._data.MainId)
 
-        print(self.LayerName)
         for vector_chunk in vector_chunks.values():
-            print(vector_chunk.VectorData)
-            parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
-            #pass
-        #logger.warning("Vector layer not yet implemented")
+            self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
+
 
 class FrameLayer(Folder, VectorLayer):
 
@@ -667,6 +664,8 @@ class FrameLayer(Folder, VectorLayer):
 
         self._layers = []
         VectorLayer.__init__(self, clip_file, layer_data)
+        
+        print(self.lines)
 
 class AnimationFolder(Folder):
     pass

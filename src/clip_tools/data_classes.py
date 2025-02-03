@@ -1,7 +1,7 @@
 from collections import namedtuple
 from attrs import define
 
-from clip_tools.constants import GradientRepeatMode, GradientShape, TextJustify, TextStyle, TextOutline
+from clip_tools.constants import GradientRepeatMode, GradientShape, TextJustify, TextStyle, TextOutline, VectorFlag, VectorPointFlag
 
 # TODO Write Methods that return bytes format
 
@@ -32,10 +32,7 @@ class ColorStop():
     num_curve_points: int
     curve_points: []
 
-@define
-class CurvePoint:
-    input_point: int # TODO Default fields + validators
-    output_point: int
+
 
 @define
 class LevelCorrection:
@@ -48,6 +45,11 @@ class LevelCorrection:
 @define
 class CurveList(list):
     pass # TODO Add verifications when adding new points (32 max, insert in order, no same input value)
+
+@define
+class CurvePoint:
+    input_point: int # TODO Default fields + validators
+    output_point: int
 
 @define
 class Posterization():
@@ -116,12 +118,39 @@ class Balance():
     Magenta: int
     Yellow: int
 
+
+
 @define
 class VectorPoint():
 
     position: Position
-    thickness: int
+    bbox: BBox
 
+    point_flag: VectorPointFlag
+
+    scale:  float
+    scale2: float
+    scale3: float
+
+    width: float
+    opacity: float
+
+@define
+class VectorLine():
+
+    point_count: int
+    vector_flag: VectorFlag
+    vector_bbox: BBox
+
+    main_color: Color
+    sub_color: Color
+
+    opacity: float
+
+    brush_id: int
+    brush_radius: float
+
+    points: [VectorPoint]
 
 @define
 class TextRun():
@@ -145,5 +174,3 @@ class TextParam():
     length: int
 
     value: int
-
-

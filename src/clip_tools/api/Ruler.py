@@ -29,14 +29,14 @@ class Rulers():
 
         rulers = []
         manager = None
-        
+
         if layer._data.RulerVectorIndex is not None and layer._data.RulerVectorIndex > 0:
             pass#logger.warning("Vector ruler not implemented")
 
         if layer._data.SpecialRulerManager is not None and layer._data.SpecialRulerManager > 0:
-            
+
             manager = layer.clip_file.sql_database.get_table("SpecialRulerManager")[layer._data.SpecialRulerManager]
-            
+
             columns = ["FirstParallel",
                         "FirstCurveParallel", 
                         "FirstMultiCurve", 
@@ -49,9 +49,9 @@ class Rulers():
 
             for column in columns:
                 param = getattr(manager, column)
-                
+
                 if param is not None and param > 0:
-                    
+
                     _module = importlib.import_module("clip_tools.api.Ruler")
                     class_name = column.lstrip("First")
                     _class = getattr(_module, class_name)
@@ -303,7 +303,6 @@ class Guide(SpecialRuler):
         self.ruler_data.CenterX = new_pos.x
         self.ruler_data.CenterY = new_pos.y
 
-
 @define
 class Perspective(SpecialRuler):
     layer: None
@@ -384,7 +383,6 @@ class Perspective(SpecialRuler):
     def grid_origin(self, new_origin):
         self.ruler_data.GridOriginX = new_origin.x
         self.ruler_data.GridOriginY = new_origin.y
-
 
 @define
 class Symmetry(SpecialRuler):
@@ -487,8 +485,12 @@ class VanishPoint():
         self.ruler_data.Guide = new_guide
 
 
+@define
 class VectorRuler(BaseRuler):
 
-    def __init__(self, layer, ruler_vector):
+    layer = None
+    vectors:[]
+
+    def __init__(self, layer, vectors):
         self.layer = layer
         logger.warning("Vector parsing not implemented")

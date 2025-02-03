@@ -2,7 +2,7 @@ from clip_tools.api.Layer import BaseLayer, FolderMixin
 
 
 class Canvas():
-    
+
     def __init__(self, clip_file, canvas_data):
         self.clip_file = clip_file
         self.canvas_data = canvas_data
