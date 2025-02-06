@@ -2,10 +2,10 @@ import io
 import zlib
 
 from PIL import Image
-from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str
+from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, decompositor
 
-from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextJustify, TextStyle, TextOutline, TextWrapDirection
-from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, EffectTone, EffectEdge, Posterization, EffectTonePosterize, EffectWaterEdge, EffectLine, VectorPoint, VectorLine, TextRun, TextParam, BBox
+from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextJustify, TextStyle, TextOutline, TextWrapDirection, VectorFlag, VectorPointFlag
+from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, EffectTone, EffectEdge, Posterization, EffectTonePosterize, EffectWaterEdge, EffectLine, VectorPoint, VectorLine, TextRun, TextParam, BBox, RulerCurvePoint
 
 from collections import namedtuple
 
@@ -13,6 +13,7 @@ import logging
 import binascii
 
 logger = logging.getLogger(__name__)
+
 
 def parse_offscreen_attribute(offscreen_attribute):
 
@@ -185,6 +186,8 @@ def parse_gradient_info(gradation_fill_info):
                     for _ in range(color_stop.num_curve_points):
                         point = CurvePoint(read_fmt(">d", gradient_data), read_fmt(">d", gradient_data))
                         
+                        # To look into
+
                         color_stop.curve_points.append(point)
 
             gradient_info["color_stops"] = color_stops
@@ -252,7 +255,6 @@ def parse_effect_info(layer_effect_info):
             #assert read_fmt(">i", layer_effect_data) == 0x14, "Please report to https://github.com/al3ks1s/clip-tools/issues"
 
             frequency = read_fmt(">d", layer_effect_data) # Between 5.0 and 85.0
-
             
             assert read_fmt(">i", layer_effect_data) == 1, "Please report to https://github.com/al3ks1s/clip-tools/issues"
             assert read_fmt(">i", layer_effect_data) == 0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
@@ -340,7 +342,11 @@ def parse_effect_info(layer_effect_info):
             assert read_fmt(">d", layer_effect_data) == 5.0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
             assert read_fmt(">i", layer_effect_data) == 0x04, "Please report to https://github.com/al3ks1s/clip-tools/issues"
 
-            directions_map = {0:ExtractLinesDirection.LEFT,1:ExtractLinesDirection.TOP,2:ExtractLinesDirection.RIGHT,3:ExtractLinesDirection.BOTTOM}
+            directions_map = {0:ExtractLinesDirection.LEFT,
+                                1:ExtractLinesDirection.TOP,
+                                2:ExtractLinesDirection.RIGHT,
+                                3:ExtractLinesDirection.BOTTOM}
+
             directions = ExtractLinesDirection(0)
             
             for _ in range(4):
@@ -654,37 +660,27 @@ def parse_text_attribute(text_layer_attribute_array):
         elif param_id == TextAttribute.ANTI_ALIASING:
             # Anti aliasing on/off ? Has 1 for on, 2 for off
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
 
         elif param_id == TextAttribute.WRAP_FRAME:
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
 
         elif param_id == TextAttribute.WRAP_DIRECTION:
             value = TextWrapDirection(read_fmt("<i", text_attributes))
-            #print([value])
 
         elif param_id == TextAttribute.HALF_WIDTH_PUNCT:
             use_half_width = read_fmt("<i", text_attributes)
-            #print(param_id, value)
 
         elif param_id == TextAttribute.ROTATION_ANGLE:
             value = read_fmt("<i", text_attributes) / 10
-            #print(param_id, value)
 
         elif param_id == TextAttribute.HORZ_IN_VERT:
             # TateChuYoko (Horizontal In Vertical) Never managed to make it work on my csp so idk what it does
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
 
         elif param_id == TextAttribute.TEXT_ID:
-            # Text Id?
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
 
         elif param_id == TextAttribute.LINE_SPACING:
-            #value = text_attributes.read(param_size)
-            #print(value)
 
             params = []
             num_spacings = read_fmt("<i", text_attributes)
@@ -787,10 +783,10 @@ def parse_point_data(point_data):
     logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
 
     for _ in range(point_count):
-        pos = Position(read_fmt(">d", points_bytes), read_fmt(">d", points_bytes))
+        pos = Position.read(points_bytes)
         thickness = read_fmt(">i", points_bytes)
 
-        points.append(VectorPoint(pos, thickness))
+        points.append(RulerCurvePoint(pos, thickness))
 
     return points
 
@@ -799,6 +795,9 @@ def parse_vector(vector_blob):
     vector_data = io.BytesIO(vector_blob)
 
     vector_lines = []
+
+    headers_sizes = []
+    flags = []
 
     while vector_data.tell() < len(vector_blob) - 16:
 
@@ -812,49 +811,46 @@ def parse_vector(vector_blob):
         assert sign2 == 72, "Please report to https://github.com/al3ks1s/clip-tools/issues"
         assert sign4 == 88, "Please report to https://github.com/al3ks1s/clip-tools/issues"
 
-        #print("Vector header:", (header_size, sign2, point_size, sign4))
+        headers_sizes.append((header_size, point_size))
 
         num_points = read_fmt(">i", vector_data)
 
-        vector_flag = read_fmt(">i", vector_data)
+        vector_flag = VectorFlag(read_fmt(">i", vector_data))
 
-        vector_bbox = BBox(read_fmt(">i", vector_data),
-                            read_fmt(">i", vector_data),
-                            read_fmt(">i", vector_data),
-                            read_fmt(">i", vector_data))
+        flags.append(" ".join(decompositor(vector_flag)))
 
-        main_color = Color(read_fmt(">I", vector_data) >> 24,
-                read_fmt(">I", vector_data) >> 24,
-                read_fmt(">I", vector_data) >> 24)
+        vector_bbox = BBox.read(vector_data)
 
-        sub_color = Color(read_fmt(">I", vector_data) >> 24,
-                read_fmt(">I", vector_data) >> 24,
-                read_fmt(">I", vector_data) >> 24)
+        main_color = Color.read(vector_data)
+        sub_color = Color.read(vector_data)
 
         global_opacity = read_fmt(">d", vector_data)
-        
+
         brush_id = read_fmt(">i", vector_data)
 
-        if brush_id == 1040:
+        brush_radius=0
+        if vector_flag & VectorFlag.NORMAL:
+            brush_radius = read_fmt(">d", vector_data)
+            last_value_unk = read_fmt(">i", vector_data)
+
+        if vector_flag & VectorFlag.FRAME:
+
             frame_brush_id = read_fmt(">i", vector_data)
-            maybe_fill_style_id = read_fmt(">i", vector_data)
+            frame_fill_id = read_fmt(">i", vector_data)
+            
+            brush_radius = read_fmt(">d", vector_data)
+            last_value_unk = read_fmt(">i", vector_data)
 
-        brush_radius = read_fmt(">d", vector_data)
-
-        last_value_unk = read_fmt(">i", vector_data)
+            brush_id = frame_brush_id
 
         points = []
 
         for _ in range(num_points):
 
-            pos = Position(read_fmt(">d", vector_data), read_fmt(">d", vector_data))
-
-            point_bbox = BBox(read_fmt(">i", vector_data),
-                                read_fmt(">i", vector_data),
-                                read_fmt(">i", vector_data),
-                                read_fmt(">i", vector_data))
+            pos = Position.read(vector_data)
+            point_bbox = BBox.read(vector_data)
             
-            point_vector_flag = read_fmt(">i", vector_data)
+            point_vector_flag = VectorPointFlag(read_fmt(">i", vector_data))
 
             # For testing
             remaining_point_size = point_size - (2*8) - (2*8) -4-4-4-4-4-4-4-4-4-4-4-4-4-4
@@ -864,40 +860,43 @@ def parse_vector(vector_blob):
             point_scale_3 = read_fmt(">f", vector_data)
 
             unk = read_fmt(">f", vector_data)
-            unk = read_fmt(">f", vector_data)
-
+            unk = read_fmt(">f", vector_data) # Dispersion? seems to define a statistical looking curve
+            
             point_width = read_fmt(">f", vector_data)
             point_opacity = read_fmt(">f", vector_data)
 
-            # Only zeros?
+            # Only zeros? Not for frames
             unk = read_fmt(">f", vector_data)
             unk = read_fmt(">f", vector_data)
             unk = read_fmt(">f", vector_data)
-
+            
             # Unknown non zero parameter
             unk = read_fmt(">f", vector_data)
-            unk = read_fmt(">i", vector_data)
-
+            unk = read_fmt(">f", vector_data)
+            
             # Only zeros
             unk = read_fmt(">i", vector_data)
+            
 
-            if vector_flag & 32:
+            if vector_flag & VectorFlag.CURVE_QUADRATIC_BEZIER:
                 
                 # Speedline startpoint?
-                unk = read_fmt(">d", vector_data)
-                #print(unk)
-                
-                unk = read_fmt(">d", vector_data)
-                #print(unk)
-                
+                bezier_point = Position.read(vector_data)
                 remaining_point_size -= 16
+
+            if vector_flag & VectorFlag.CURVE_CUBIC_BEZIER:
+                
+                bezier_first_point = Position.read(vector_data)
+                bezier_second_point = Position.read(vector_data)
+                
+                remaining_point_size -= 32
 
             # For testing
             point_params = []
             for _ in range(remaining_point_size // 4):
                 point_params.append(read_fmt(">i", vector_data))            
             if len(point_params) != 0:
-                logger.debug(f"Found new vector parameters : {point_params}")
+                logger.warning(f"Found new vector parameters : {point_params}")
 
 
             points.append(VectorPoint(pos,
@@ -909,6 +908,7 @@ def parse_vector(vector_blob):
                                         point_width,
                                         point_opacity))
 
+
         vector_lines.append(VectorLine(num_points,
                                         vector_flag,
                                         vector_bbox,
@@ -918,5 +918,9 @@ def parse_vector(vector_blob):
                                         brush_id,
                                         brush_radius,
                                         points))
+
+    #print(set(flags))
+    #print(set(headers_sizes))
+    #print()
 
     return vector_lines

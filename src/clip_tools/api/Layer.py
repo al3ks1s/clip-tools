@@ -1,5 +1,5 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
-from clip_tools.utils import read_fmt
+from clip_tools.utils import read_fmt, decompositor
 from clip_tools.clip.ClipData import Layer
 from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder, LayerLock, LayerMasking
 from clip_tools.parsers import *
@@ -75,6 +75,9 @@ class BaseLayer():
         if layer_data.VectorNormalType == 0:
             return VectorLayer(clip_file, layer_data)
 
+        if layer_data.VectorNormalType == 1:
+            return BalloonLayer(clip_file, layer_data)
+
         if layer_data.VectorNormalType == 2:
             return StreamLineLayer(clip_file, layer_data)
 
@@ -95,7 +98,6 @@ class BaseLayer():
 
         logger.warning("Couldn't find proper layer type for %s. LayerType is %d" % (layer_data.LayerName, layer_data.LayerType))
         return BaseLayer(clip_file, layer_data)
-
 
     @property
     def has_ruler(self):
@@ -122,11 +124,11 @@ class BaseLayer():
         return self._data.LayerVisibility & LayerVisibility.VISIBLE
 
     @property
-    def LayerName(self):
+    def layer_name(self):
         return self._data.LayerName
 
-    @LayerName.setter
-    def LayerName(self, layer_name):
+    @layer_name.setter
+    def layer_name(self, layer_name):
         self._data.layer_name = layer_name
 
     @property
@@ -457,10 +459,12 @@ class PixelLayer(BaseLayer):
         #print(parsed_attribute)
         return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
 
-class PaperLayer(BaseLayer):
+    
+    @classmethod
+    def frompil(cls, pil_im):
+        pass
 
-    # Paper color stored in the three following columns : DrawColorMainRed, DrawColorMainGreen, DrawColorMainBlue over the full scale of an uint
-    # eg: 13369925889263, 1456559825, 3407858463 defines : (79, 86, 202) bitshift of 24 left or right
+class PaperLayer(BaseLayer):
 
     # Special RenderType: 20
 
@@ -605,11 +609,6 @@ class GradientLayer(BaseLayer):
         BaseLayer.__init__(self, clip_file, layer_data)
         self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
 
-        """
-        print(self.LayerName)
-        print(self.gradient)
-        print()
-        #"""
 
     @property
     def shape(self):
@@ -647,8 +646,8 @@ class VectorLayer(BaseLayer):
         vector_chunks = self.clip_file.sql_database.get_referenced_items("VectorObjectList", "LayerId", self._data.MainId)
 
         for vector_chunk in vector_chunks.values():
+            #print(self.layer_name)
             self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
-
 
 class FrameLayer(Folder, VectorLayer):
 
@@ -664,11 +663,6 @@ class FrameLayer(Folder, VectorLayer):
 
         self._layers = []
         VectorLayer.__init__(self, clip_file, layer_data)
-        
-        print(self.lines)
-
-class AnimationFolder(Folder):
-    pass
 
 class StreamLineLayer(VectorLayer):
 
@@ -681,7 +675,14 @@ class StreamLineLayer(VectorLayer):
 
     pass
 
-class Layer_3D(BaseLayer):
+class BalloonLayer(VectorLayer):
+    pass
+     
+class AnimationFolder(Folder):
+    pass
+
+
+class Layer3D(BaseLayer):
 
     # Three dimmension layer has a LayerType of 0
     # Specific data starts at Manager3DOd

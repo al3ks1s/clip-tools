@@ -3,12 +3,17 @@ from attrs import define
 
 from clip_tools.constants import GradientRepeatMode, GradientShape, TextJustify, TextStyle, TextOutline, VectorFlag, VectorPointFlag
 
+from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str
 # TODO Write Methods that return bytes format
 
 @define
 class Position():
     x: float
     y: float
+
+    @classmethod
+    def read(cls, io_stream):
+        return cls(read_fmt(">d", io_stream), read_fmt(">d", io_stream))
 
 @define
 class BBox():
@@ -17,11 +22,25 @@ class BBox():
     x2: int
     y2: int
 
+    @classmethod
+    def read(cls, io_stream):
+        return cls(read_fmt(">i", io_stream),
+                    read_fmt(">i", io_stream),
+                    read_fmt(">i", io_stream),
+                    read_fmt(">i", io_stream))
+
 @define
 class Color():
     r: int
     g: int
     b: int
+
+    @classmethod
+    def read(cls, io_stream):
+        return cls(read_fmt(">I", io_stream) >> 24,
+                    read_fmt(">I", io_stream) >> 24,
+                    read_fmt(">I", io_stream) >> 24)
+
 
 @define
 class ColorStop():
@@ -33,7 +52,6 @@ class ColorStop():
     curve_points: []
 
 
-
 @define
 class LevelCorrection:
     input_left: int # TODO Default fields + validators
@@ -41,6 +59,14 @@ class LevelCorrection:
     input_right: int
     output_left: int
     output_right: int
+
+    @classmethod
+    def read(cls, io_stream):
+        return cls(read_fmt(">H", io_stream) >> 8,
+                    read_fmt(">H", io_stream) >> 8,
+                    read_fmt(">H", io_stream) >> 8,
+                    read_fmt(">H", io_stream) >> 8,
+                    read_fmt(">H", io_stream) >> 8)
 
 @define
 class CurveList(list):
@@ -66,7 +92,7 @@ class EffectEdge():
     thickness: float
     color: Color
 
-@define 
+@define
 class EffectTone():
     enabled: bool
     resolution: float
@@ -118,7 +144,17 @@ class Balance():
     Magenta: int
     Yellow: int
 
+    @classmethod
+    def read(cls, io_stream):
+        return cls(read_fmt(">i", io_stream),
+                    read_fmt(">i", io_stream),
+                    read_fmt(">i", io_stream))
 
+@define
+class RulerCurvePoint():
+
+    pos: Position
+    thickness: int
 
 @define
 class VectorPoint():

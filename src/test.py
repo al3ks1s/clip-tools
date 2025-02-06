@@ -1,7 +1,7 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
 from clip_tools.api.Layer import *
 from clip_tools.api.Project import *
-from clip_tools.utils import read_fmt
+from clip_tools.utils import read_fmt, decompositor
 import os
 import io
 from collections import namedtuple
@@ -12,7 +12,7 @@ import zlib
 workdir = '../tests/Samples'
 
 filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
-#filelist = ["Illustration-Speedlines.clip"]
+filelist = ["Illustration-Frames.clip"]
 
 """
 
@@ -47,18 +47,11 @@ for f in filelist:
             proj.clip_file.sql_database.get_table(k)
 
         #proj.canvas.root_folder[0].topil().show()
-
         #clipFile.sql_database._scheme_to_classes()
 
-
         for layer in proj.canvas.root_folder.descendants():
+            pass
 
-            if isinstance(layer, TextLayer):
-                pass
-
-                #print("Showing layer", layer.LayerName)
-                
-                #im = layer.topil()
-                #im.show()
-                #"""
+        for k, v in proj.clip_file.sql_database.get_table("BrushStyle").items():
+            print(decompositor(v.StyleFlag))
 

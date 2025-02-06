@@ -76,3 +76,12 @@ def pack(fmt, *args):
 def unpack(fmt, data):
     fmt = str(">" + fmt)
     return struct.unpack(fmt, data)
+
+def decompositor(x):
+    powers = []
+    i = 1
+    while i <= x:
+        if i & x:
+            powers.append(str(i))
+        i <<= 1
+    return powers

@@ -8,7 +8,7 @@ from clip_tools.data_classes import Position, VectorPoint
 import importlib
 import io
 from clip_tools.utils import read_fmt, read_csp_unicode_str
-from clip_tools.parsers import parse_point_data
+from clip_tools.parsers import parse_point_data, parse_vector
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,12 @@ class Rulers():
         manager = None
 
         if layer._data.RulerVectorIndex is not None and layer._data.RulerVectorIndex > 0:
-            pass#logger.warning("Vector ruler not implemented")
+            
+            ext_vector_ref = layer.clip_file.sql_database.get_table("VectorObjectList")[layer._data.RulerVectorIndex].VectorData
+            vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_datas
+
+            vectors = parse_vector(vector_blob)
+            #rulers.append(VectorRuler(layer, vectors))
 
         if layer._data.SpecialRulerManager is not None and layer._data.SpecialRulerManager > 0:
 
@@ -493,4 +498,4 @@ class VectorRuler(BaseRuler):
 
     def __init__(self, layer, vectors):
         self.layer = layer
-        logger.warning("Vector parsing not implemented")
+        self.vectors = vectors

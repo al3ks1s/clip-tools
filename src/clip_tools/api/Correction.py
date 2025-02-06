@@ -45,12 +45,7 @@ class Level():
         levels = []
 
         while correction_data.tell() < section_size + 8:
-            
-            levels.append(LevelCorrection(read_fmt(">H", correction_data) >> 8,
-                                                read_fmt(">H", correction_data) >> 8,
-                                                read_fmt(">H", correction_data) >> 8,
-                                                read_fmt(">H", correction_data) >> 8,
-                                                read_fmt(">H", correction_data) >> 8))
+            levels.append(LevelCorrection.read(correction_data))
 
         # There is only 4 meaningful level tables, no idea why there are more
         return cls(levels[0],levels[1],levels[2],levels[3])
@@ -123,17 +118,9 @@ class ColorBalance():
 
         keep_brightness = bool(read_fmt(">i", correction_data))
 
-        balance_shadow = Balance(read_fmt(">i", correction_data),
-                                    read_fmt(">i", correction_data),
-                                    read_fmt(">i", correction_data))
-
-        balance_midtones = Balance(read_fmt(">i", correction_data),
-                                    read_fmt(">i", correction_data),
-                                    read_fmt(">i", correction_data))
-
-        balance_highlight = Balance(read_fmt(">i", correction_data),
-                                    read_fmt(">i", correction_data),
-                                    read_fmt(">i", correction_data))
+        balance_shadow = Balance.read(correction_data)
+        balance_midtones = Balance.read(correction_data)
+        balance_highlight = Balance.read(correction_data)
 
         return cls(keep_brightness, balance_shadow, balance_midtones, balance_highlight)
 

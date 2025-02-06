@@ -223,7 +223,7 @@ class TextAttribute(IntEnum):
 
     WRAP_FRAME = 53
     WRAP_DIRECTION = 55
-    
+
     BACKGROUND = 54
     EDGE = 56
 
@@ -259,20 +259,23 @@ class TextWrapDirection(IntEnum):
     CENTER = 1
     BOTTOM = 2
 
-
+# These are most likely flags but they make no sense
 class VectorFlag(IntFlag):
-    pass
-    """
-    UNK = 1
-    UNK = 2
-    UNK = 4
-    UNK = 8
-    UNK = 16
-    UNK = 32
 
-    UNK = 4096
-    UNK = 8192
-    #"""
+    NORMAL= 1
+    RULER = 4
+    FRAME = 8
+
+    # Defines the Bezier curve type
+    CURVE_STRAIGHT = 16
+    CURVE_QUADRATIC_BEZIER = 32
+    CURVE_CUBIC_BEZIER = 64
+    CURVE_SPLINE = 128
+
+    CLOSED_LOOP = 256 # First control point is also the last
+
+    UNK1 = 4096 # Only seen with frames
+    UNK2 = 8192 # Only seen with free pen vectors
 
 class VectorPointFlag(IntFlag):
     CORNER = 1
