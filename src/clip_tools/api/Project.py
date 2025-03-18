@@ -10,7 +10,10 @@ class Project():
         canvas_data = self.clip_file.sql_database.get_table("Canvas")[self._data.ProjectCanvas]
 
         self.canvas = Canvas(clip_file, canvas_data)
-    
+
+    def save(self, fp):
+        self.clip_file.write(fp)
+
     @classmethod
     def open(cls, fp):
         
@@ -19,9 +22,6 @@ class Project():
 
         return cls(clip_file, data)
 
-    @classmethod
-    def save(cls, fp):
-        pass
 
     @classmethod
     def new(cls, fp):

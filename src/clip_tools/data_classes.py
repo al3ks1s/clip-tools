@@ -1,9 +1,8 @@
 from collections import namedtuple
-from attrs import define
+from attrs import define, Factory, field
 
-from clip_tools.constants import GradientRepeatMode, GradientShape, TextJustify, TextStyle, TextOutline, VectorFlag, VectorPointFlag
-
-from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str
+from clip_tools.constants import GradientRepeatMode, GradientShape, TextAlign, TextStyle, TextOutline, VectorFlag, VectorPointFlag
+from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, attrs_range_builder
 # TODO Write Methods that return bytes format
 
 @define
@@ -23,23 +22,27 @@ class BBox():
     y2: int
 
     @classmethod
-    def read(cls, io_stream):
-        return cls(read_fmt(">i", io_stream),
-                    read_fmt(">i", io_stream),
-                    read_fmt(">i", io_stream),
-                    read_fmt(">i", io_stream))
+    def read(cls, fmt, io_stream):
+        return cls(
+            read_fmt(fmt, io_stream),
+            read_fmt(fmt, io_stream),
+            read_fmt(fmt, io_stream),
+            read_fmt(fmt, io_stream)
+        )
 
 @define
 class Color():
-    r: int
-    g: int
-    b: int
+    r: int = attrs_range_builder(int, 0, [0, 255])
+    g: int = attrs_range_builder(int, 0, [0, 255])
+    b: int = attrs_range_builder(int, 0, [0, 255])
 
     @classmethod
     def read(cls, io_stream):
-        return cls(read_fmt(">I", io_stream) >> 24,
-                    read_fmt(">I", io_stream) >> 24,
-                    read_fmt(">I", io_stream) >> 24)
+        return cls(
+            read_fmt(">I", io_stream) >> 24,
+            read_fmt(">I", io_stream) >> 24,
+            read_fmt(">I", io_stream) >> 24
+        )
 
 
 @define
@@ -54,11 +57,13 @@ class ColorStop():
 
 @define
 class LevelCorrection:
-    input_left: int # TODO Default fields + validators
-    intput_mid: int
-    input_right: int
-    output_left: int
-    output_right: int
+
+    input_left: int = attrs_range_builder(int, 0, [0, 255])
+    intput_mid: int = attrs_range_builder(int, 127, [0, 255])
+    input_right: int = attrs_range_builder(int, 255, [0, 255])
+
+    output_left: int = attrs_range_builder(int, 0, [0, 255])
+    output_right: int = attrs_range_builder(int, 255, [0, 255])
 
     @classmethod
     def read(cls, io_stream):
@@ -69,80 +74,42 @@ class LevelCorrection:
                     read_fmt(">H", io_stream) >> 8)
 
 @define
-class CurveList(list):
-    pass # TODO Add verifications when adding new points (32 max, insert in order, no same input value)
-
-@define
 class CurvePoint:
-    input_point: int # TODO Default fields + validators
-    output_point: int
+    input_point = attrs_range_builder(int, 127, [0, 255])
+    output_point = attrs_range_builder(int, 127, [0, 255])
+
 
 @define
-class Posterization():
-    posterize_input: int
-    posterize_output: int
+class CurveList():
 
-@define
-class EffectApplyOpacity():
-    apply_opacity: bool
+    points: Factory(list)
 
-@define
-class EffectEdge():
-    enabled: bool
-    thickness: float
-    color: Color
+    @property
+    def point_count(self):
+        return len(self.points)
 
-@define
-class EffectTone():
-    enabled: bool
-    resolution: float
-    shape: GradientShape
-    use_image_brightness: bool
-    frequency: float
-    angle: int
-    noise_size: int
-    noise_factor: int
-    position: Position
+    def add_point(self, point: CurvePoint):
+        
+        if self.point_count >= 32:
+            return
 
-@define
-class EffectTonePosterize():
-    enabled: bool
-    posterization_count: int
-    posterizations: []
+        self.points.append(point)
 
-@define
-class EffectWaterEdge():
-    enabled: bool
-    edge_range: float
-    edge_opacity: float
-    edge_darkness: float
-    edge_blurring: float
+    @classmethod
+    def new(cls):
 
-@define
-class EffectLine():
-    enabled: bool
+        cl = cls()
+        cl.add_point(CurvePoint(0, 0))
+        cl.add_point(CurvePoint(255,255))
+        return cl
 
-    black_fill_enabled: bool
-    black_fill_level: int
-
-    posterize_enabled: bool
-
-    line_width: int
-    effect_threshold: int
-
-    directions: {}
-
-    posterization_count: int
-    posterizations: {}
-
-    anti_aliasing: bool
 
 @define
 class Balance():
 
-    Cyan: int # TODO Validators
-    Magenta: int
-    Yellow: int
+    Cyan: int = attrs_range_builder(int, 0, [-100, 100])
+    Magenta: int = attrs_range_builder(int, 0, [-100, 100])
+    Yellow: int = attrs_range_builder(int, 0, [-100, 100])
 
     @classmethod
     def read(cls, io_stream):
@@ -210,3 +177,66 @@ class TextParam():
     length: int
 
     value: int
+
+@define
+class ReadingSetting():
+
+    reading_type: int
+    reading_ratio: int
+    adjust_reading: float
+    space_between: float
+    reading_space_free: float
+
+    reading_font: str
+
+    @classmethod
+    def read(cls, io_stream):
+
+        reading_type = read_fmt("<h", io_stream)
+        reading_ratio = read_fmt("<h", io_stream)
+        adjust_reading = read_fmt("<h", io_stream) / 100
+        space_between = read_fmt("<h", io_stream) / 100
+        reading_space_free = read_fmt("<h", io_stream) / 100
+
+        reading_font = read_csp_str("<h", io_stream)
+
+        return cls(
+            reading_type,
+            reading_ratio,
+            adjust_reading,
+            space_between,
+            reading_space_free,
+            reading_font
+        )
+
+@define
+class TextBackground():
+
+    enabled: bool
+    color: Color
+    opacity: int
+
+    @classmethod
+    def read(cls, io_stream):
+        enabled = read_fmt("<i", io_stream)
+        color = Color.read(io_stream)
+        opacity = ((read_fmt("<I", io_stream) >> 24) * 100) // 255
+
+        return cls(enabled, color, opacity)
+
+@define
+class TextEdge():
+    enabled: bool
+    size: int
+    color:Color
+
+    @classmethod
+    def read(cls, io_stream):
+        edge_enabled = read_fmt("<i", io_stream)
+        edge_size = read_fmt("<i", io_stream) // 1000
+
+        unk = read_fmt("<i", io_stream)
+
+        edge_color = Color.read(io_stream)
+
+        return cls(edge_enabled, edge_size, edge_color)

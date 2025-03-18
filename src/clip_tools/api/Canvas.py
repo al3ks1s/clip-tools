@@ -34,7 +34,6 @@ class Canvas():
     def resolution(self, new_resolution):
         self.canvas_data.CanvasResolution = new_resolution
 
-
     def _init_structure(self):
         
         layers = self.clip_file.sql_database.get_table("Layer")

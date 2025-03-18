@@ -4,10 +4,10 @@ from clip_tools.clip.DataChunk import DataChunks
 from clip_tools.clip.Database import Database
 from clip_tools.clip.Footer import Footer
 
-from clip_tools.utils import read_fmt
+from clip_tools.utils import read_fmt, write_fmt
 
 class ClipStudioFile:
-    
+
     chunk_signature: str = b'CSFCHUNK'
     file_size: int
     header_offset: int
@@ -36,4 +36,22 @@ class ClipStudioFile:
         sql_database = Database.read(fp)
         footer = Footer.read(fp)
 
+        #print(f"File size {file_size}, {fp.tell()}, difference: {file_size - fp.tell()}")
+
         return cls(file_size, header_offset, header, data_chunks, sql_database)
+
+    def write(self, fp):
+
+        fp.write(ClipStudioFile.chunk_signature)
+        size_ptr = fp.tell()
+        write_fmt(fp, ">q", 0)
+        write_fmt(fp, ">q", 24)
+
+        self.header.write(fp)
+        self.data_chunks.write(fp)
+        self.sql_database.write(fp)
+        Footer.write(fp)
+
+        file_size = fp.tell()
+        fp.seek(size_ptr, 0)
+        write_fmt(fp, ">q", file_size)

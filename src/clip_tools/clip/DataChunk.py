@@ -1,6 +1,8 @@
 from clip_tools.utils import read_fmt
 from clip_tools.clip.Database import Database
 import io 
+import zlib
+import binascii
 
 class BlockData:
     begin_chunk_signature: str = 'BlockDataBeginChunk'.encode('UTF-16BE')
@@ -36,7 +38,7 @@ class BlockData:
 
         block_data_index = read_fmt(">i", fp)
 
-        fp.read(12) #????
+        fp.read(12)
 
         data_present = read_fmt(">i", fp)
 
@@ -51,18 +53,29 @@ class BlockData:
         block_end_chunk_size = read_fmt(">i", fp) * 2
         end_signature = fp.read(block_end_chunk_size)
         assert end_signature == BlockData.end_chunk_signature
-
         return cls(block_data_size, block_data_text_size, block_data_index, data_present, data)
 
+    def write(self, fp):
+        pass
+
+    def checksum(self):
+
+        if not self.data_present:
+            return 0
+
+        return -1
+
+class VectorChunk():
+    pass
 
 class BlockDatas(list):
-    
+
     block_status = []
     block_checksums = []
 
     @classmethod
     def read(cls, fp):
-        
+
         has_next_block = True
         blocks = BlockDatas()
 
@@ -72,11 +85,15 @@ class BlockDatas(list):
 
             if block_data_size == 11 or block_data_size == 13: # Block Status or Block checksum
                 signature = signature = fp.read(block_data_size * 2)
+
             else:
                 block_data_text_size = read_fmt(">i", fp) * 2
                 signature = fp.read(block_data_text_size)
 
             if signature == BlockData.begin_chunk_signature:
+
+                #print("New block")
+                #print("----------------------")
 
                 fp.seek(-8 - block_data_text_size , 1)
 
@@ -86,26 +103,40 @@ class BlockDatas(list):
             elif signature == BlockData.status_chunk_signature:
 
                 unknown_var = read_fmt(">i", fp) # Need to find out what this is, usually 0c
+                assert unknown_var == 12
+
                 block_count = read_fmt(">i", fp)
-                unknown_var2 = read_fmt(">i", fp) # Looks like the block count a second time
+                
+                unknown_var2 = read_fmt(">i", fp)
+                assert unknown_var2 == 4
 
                 assert block_count == len(blocks)
 
                 for i in range(block_count):
-                    blocks.block_status.append(read_fmt(">i", fp))
-        
+                    a = read_fmt(">i", fp)
+                    blocks.block_status.append(a)
+                    #print(a)
+
             elif signature == BlockData.checksum_chunk_signature:
 
                 unknown_var3 = read_fmt(">i", fp) # Need to find out what this is, usually 0c
-                
+                assert unknown_var3 == 12
+
                 block_count = read_fmt(">i", fp)
-                unknown_var4 = read_fmt(">i", fp) # Looks like the block count a second time
+                
+                unknown_var4 = read_fmt(">i", fp)
+                assert unknown_var4 == 4
 
                 assert block_count == len(blocks)
                 
                 for i in range(block_count):
-                    blocks.block_checksums.append(read_fmt(">i", fp))
-                
+                    a = read_fmt(">I", fp)
+                    blocks.block_checksums.append(a)
+                    blocks[i].checksum()
+                    #print(a)
+                    #print(hex(a))
+                    #print()
+
             else:
 
                 fp.seek(0)
@@ -113,6 +144,8 @@ class BlockDatas(list):
 
         return blocks
 
+    def write(self, fp):
+        pass
 
 class DataChunk:
     
@@ -131,33 +164,35 @@ class DataChunk:
 
     @classmethod
     def read(cls, fp):
-        
+
 
         external_chunk_size = read_fmt(">q", fp)
-        
+
         external_chunk_id_length = read_fmt(">q", fp)
-
         external_chunk_id = fp.read(external_chunk_id_length)
-
+        
         external_chunk_size_2 = read_fmt(">q", fp)
 
         assert external_chunk_size == external_chunk_size_2 + external_chunk_id_length + 16
-    
+
         block_raw = io.BytesIO(fp.read(external_chunk_size_2))
 
         block_datas = BlockDatas.read(block_raw)        
 
         return cls(external_chunk_size, external_chunk_id, block_datas)
 
+    def write(self, fp):
+        pass
+
 class DataChunks(dict):
-    
+
     @classmethod
     def read(cls, fp): # chunkSizes
-        
+
         chunks = DataChunks()
 
         while True:
-            
+
             signature = fp.read(8)
 
             if signature == DataChunk.chunk_signature:
@@ -170,3 +205,7 @@ class DataChunks(dict):
 
         return chunks
 
+    def write(self, fp):
+        
+        for chunk_id in self:
+            pass

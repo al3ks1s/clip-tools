@@ -9,21 +9,7 @@ class DataType(IntEnum):
     STR = 3
     BYTES = 4
 
-"""
 
-class Flag(Enum):
-    pass
-
-class OwnerType(Enum):
-    pass
-
-class LockType(Enum):
-    pass
-
-class LockSpecified(Enum):
-    pass
-
-"""
 
 # ----------------
 # Data definitions
@@ -237,7 +223,7 @@ class TextAttribute(IntEnum):
     BOX_SIZE = 63
     QUAD_VERTS = 64
 
-class TextJustify(IntEnum):
+class TextAlign(IntEnum):
     LEFT = 0
     RIGHT = 1
     CENTER = 2
@@ -278,6 +264,9 @@ class VectorFlag(IntFlag):
     UNK2 = 8192 # Only seen with free pen vectors
 
 class VectorPointFlag(IntFlag):
+
+    NORMAL = 0
+    
     CORNER = 1
     FRAME = 2 # for a frame or to define mask?
 

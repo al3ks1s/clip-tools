@@ -36,7 +36,7 @@ class Rulers():
             vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_datas
 
             vectors = parse_vector(vector_blob)
-            #rulers.append(VectorRuler(layer, vectors))
+            rulers.append(VectorRuler(layer, vectors))
 
         if layer._data.SpecialRulerManager is not None and layer._data.SpecialRulerManager > 0:
 

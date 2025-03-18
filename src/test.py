@@ -1,6 +1,7 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
 from clip_tools.api.Layer import *
 from clip_tools.api.Project import *
+from clip_tools.clip.ClipData import ModelData3D
 from clip_tools.utils import read_fmt, decompositor
 import os
 import io
@@ -12,7 +13,7 @@ import zlib
 workdir = '../tests/Samples'
 
 filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
-filelist = ["Illustration-Frames.clip"]
+filelist = ["Illustration-Rulers.clip"]
 
 """
 
@@ -51,7 +52,21 @@ for f in filelist:
 
         for layer in proj.canvas.root_folder.descendants():
             pass
+        
+        proj.canvas.canvas_data.ShowGrid = 6
+        proj.canvas.canvas_data.GridDitch = 10000.0
+        
+        proj.canvas.canvas_data.write_to_db(proj.clip_file.sql_database)
 
-        for k, v in proj.clip_file.sql_database.get_table("BrushStyle").items():
-            print(decompositor(v.StyleFlag))
+        proj.clip_file.sql_database.get_table("Canvas")[1].ShowGrid
 
+        data3D = ModelData3D.new()
+        data3D.MainId = 5
+        data3D.CanvasId = 8
+        data3D.Layer3DModelData = b'AAAAAAAAA'
+        
+        print(data3D)
+        data3D.write_to_db(proj.clip_file.sql_database)
+        print(proj.clip_file.sql_database.get_table("ModelData3D"))
+
+        data3D.write_to_db(proj.clip_file.sql_database)

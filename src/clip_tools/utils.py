@@ -1,6 +1,7 @@
 import logging
 import struct
 
+import attrs
 
 def read_fmt(fmt, fp):
     """
@@ -85,3 +86,23 @@ def decompositor(x):
             powers.append(str(i))
         i <<= 1
     return powers
+
+# Attrs converterss
+def validate_range(value, field):
+
+    range_ = field.metadata["range"]
+    return min(max(value, range_[0]), range_[1])
+
+def attrs_range_builder(type_, default, range_):
+    return attrs.field(
+        validator=attrs.validators.instance_of(type_),
+        default=default,
+        metadata={"range": range_},
+        converter=[
+            type_,
+            attrs.Converter(
+                validate_range,
+                takes_field=True
+            )
+        ]
+    )

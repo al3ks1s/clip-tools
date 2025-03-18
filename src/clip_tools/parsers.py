@@ -4,8 +4,8 @@ import zlib
 from PIL import Image
 from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, decompositor
 
-from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextJustify, TextStyle, TextOutline, TextWrapDirection, VectorFlag, VectorPointFlag
-from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, EffectTone, EffectEdge, Posterization, EffectTonePosterize, EffectWaterEdge, EffectLine, VectorPoint, VectorLine, TextRun, TextParam, BBox, RulerCurvePoint
+from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextAlign, TextStyle, TextOutline, TextWrapDirection, VectorFlag, VectorPointFlag
+from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, VectorPoint, VectorLine, TextRun, TextParam, BBox, RulerCurvePoint, ReadingSetting, TextBackground, TextEdge
 
 from collections import namedtuple
 
@@ -13,7 +13,6 @@ import logging
 import binascii
 
 logger = logging.getLogger(__name__)
-
 
 def parse_offscreen_attribute(offscreen_attribute):
 
@@ -40,7 +39,6 @@ def parse_offscreen_attribute(offscreen_attribute):
     block_grid_width = read_fmt(">i", offscreen_io)
     block_grid_height = read_fmt(">i", offscreen_io)
 
-    #pixel_packing_names = ["ChannelBytes", "AlphaChannelCount", "BufferChannelCount", "TotalChannelCount", "unk1", ]
     pixel_packing_attributes = [read_fmt(">i", offscreen_io) for _i in range(16)]
 
     initcolor_size = read_fmt(">i", offscreen_io)
@@ -77,6 +75,7 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
             3: "RGB",
             4: "RGBA",
             5: "RGBA",
+
             1: "L",
             2: "LA"
         }
@@ -104,8 +103,12 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
 
     unk1 = offscreen_attributes.pixel_packing_attributes[12] # Always 8
     unk1 = offscreen_attributes.pixel_packing_attributes[13] # Always 8
-    monochrome = offscreen_attributes.pixel_packing_attributes[14] # Only changed to 1 when the layer was mono
+
+    monochrome = bool(offscreen_attributes.pixel_packing_attributes[14]) # Only changed to 1 when the layer was mono
+    
     unk1 = offscreen_attributes.pixel_packing_attributes[15] # Always 0
+
+    total_channel_count = buffer_channel_count + alpha_channel_count
 
     im = Image.new(channel_to_pil(total_channel_count), (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height), 255*offscreen_attributes.default_fill_color)
 
@@ -114,27 +117,44 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
     for h in range(offscreen_attributes.block_grid_height):
         for w in range(offscreen_attributes.block_grid_width):
             block = chunk.block_datas[h * offscreen_attributes.block_grid_width + w]
-            
+
             block_res = b''
-            
+
             if block.data_present:
 
                 pix_bytes = zlib.decompress(block.data)
-                
+
                 final_channels = []
 
                 if buffer_channel_count != 0:
-                    block_buffer = Image.frombuffer(channel_to_pil(buffer_channel_count), (block_width, block_height), pix_bytes[block_area * alpha_channel_count:block_area*(buffer_channel_count + alpha_channel_count)])
-                    buffer_channels = block_buffer.split()
 
+                    buffer_block_byte_count = block_area // (8 // (buffer_bit_depth // buffer_channel_count))
+
+                    if monochrome:
+                        block_buffer = Image.frombuffer("1", (block_width, block_height), pix_bytes[buffer_block_byte_count * alpha_channel_count:buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)])
+                        block_buffer = block_buffer.convert(channel_to_pil(buffer_channel_count))
+
+                    else:
+                        block_buffer = Image.frombuffer(channel_to_pil(buffer_channel_count), (block_width, block_height), pix_bytes[buffer_block_byte_count * alpha_channel_count:buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)])
+
+                    buffer_channels = block_buffer.split()
                     block_buffer = buffer_channels[:3][::-1]
 
                     final_channels.extend(block_buffer)
 
                 if alpha_channel_count != 0:
-                    block_alpha = Image.frombuffer(channel_to_pil(alpha_channel_count), (block_width, block_height), pix_bytes[:block_area * alpha_channel_count]).split()
-                    final_channels.extend(block_alpha)
-            
+
+                    alpha_byte_count = block_area // (8 // alpha_bit_depth)
+
+                    if monochrome:
+                        block_alpha = Image.frombuffer("1", (block_width, block_height), pix_bytes[:alpha_byte_count * alpha_channel_count])
+                        block_alpha = block_alpha.convert(channel_to_pil(alpha_channel_count))
+                    else:
+
+                        block_alpha = Image.frombuffer(channel_to_pil(alpha_channel_count), (block_width, block_height), pix_bytes[:alpha_byte_count * alpha_channel_count])
+
+                    final_channels.extend(block_alpha.split())
+
                 if len(final_channels) == 0:
                     raise ValueError("No channels to merge in chunk decoding")
 
@@ -220,164 +240,6 @@ def parse_gradient_info(gradation_fill_info):
 
     return gradient_info
 
-def parse_effect_info(layer_effect_info):
-
-    layer_effect_data = io.BytesIO(layer_effect_info)
-
-    effect_data_size = read_fmt(">i", layer_effect_data)
-    assert read_fmt(">i", layer_effect_data) == 0x02, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-    effects = {}
-
-    while layer_effect_data.tell() < effect_data_size:
-
-        param_name = read_csp_unicode_str(">i", layer_effect_data)
-
-        if param_name == "EffectEdge":
-
-            edge_enabled = bool(read_fmt(">i", layer_effect_data))
-            thickness = read_fmt(">d", layer_effect_data)
-
-            rgb = [read_fmt(">I", layer_effect_data) >> 24 for _ in range(3)]
-
-            effects[param_name] = EffectEdge(edge_enabled, thickness, rgb)
-
-        elif param_name == "EffectTone":
-
-            screentone_enabled = bool(read_fmt(">i", layer_effect_data))
-
-            resolution = read_fmt(">d", layer_effect_data)#?
-
-            screentone_shape = ScreenToneShape(read_fmt(">i", layer_effect_data))# Perhaps the shape of the screentone?
-            use_image_brightness = bool(read_fmt(">i", layer_effect_data)) # Use image brightness (default is color)
-
-            to_investigate = read_fmt(">i", layer_effect_data) # Not 20 for some gradients
-            #assert read_fmt(">i", layer_effect_data) == 0x14, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-            frequency = read_fmt(">d", layer_effect_data) # Between 5.0 and 85.0
-            
-            assert read_fmt(">i", layer_effect_data) == 1, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-            assert read_fmt(">i", layer_effect_data) == 0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-            angle = read_fmt(">i", layer_effect_data) # Between 0 and 359
-
-            noise_size = read_fmt(">i", layer_effect_data)
-            noise_factor = read_fmt(">i", layer_effect_data)
-
-            assert read_fmt(">i", layer_effect_data) == 0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-            assert read_fmt(">i", layer_effect_data) == 0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-            position = Position(read_fmt(">d", layer_effect_data), read_fmt(">d", layer_effect_data))
-
-            effects[param_name] = EffectTone(screentone_enabled, resolution, screentone_shape, use_image_brightness, frequency, angle, noise_size, noise_factor, position)
-
-        elif param_name == "EffectTextureMap":
-            
-            section_size = read_fmt(">i", layer_effect_data)
-            layer_effect_data.read(section_size - 4)
-
-            # Bypass
-
-        elif param_name == "EffectApplyOpacity":
-            
-            section_size = read_fmt(">i", layer_effect_data)
-            apply_opacity_enabled = read_fmt(">i", layer_effect_data) # Enable layer reflect opacity
-            
-            effects[param_name] = apply_opacity_enabled
-
-        elif param_name == "EffectToneAreaColor":
-            
-            section_size = read_fmt(">i", layer_effect_data)
-            layer_effect_data.read(section_size - 4)
-
-            # Bypass
-
-        elif param_name == "EffectTonePosterize":
-
-            section_size = read_fmt(">i", layer_effect_data)
-            posterize_enabled = read_fmt(">i", layer_effect_data)
-
-            posterize_count = read_fmt(">i", layer_effect_data)
-            posterizations = []
-
-            for _ in range(posterize_count):
-                posterize_input = read_fmt(">i", layer_effect_data) # Posterization input over 0..255
-                posterize_output = read_fmt(">i", layer_effect_data) # Postrize output over 1..99
-
-                posterizations.append(Posterization(posterize_input, posterize_output))
-
-            effects[param_name] = EffectTonePosterize(posterize_enabled, posterize_count, posterizations)
-
-        elif param_name == "EffectWaterEdge":
-
-            section_size = read_fmt(">i", layer_effect_data)
-            water_edge_enabled = read_fmt(">i", layer_effect_data)
-            
-            edge_range = read_fmt(">d", layer_effect_data) # Between 1.0 and 20.0
-            edge_opacity = read_fmt(">d", layer_effect_data) # Between 1 and 100
-            edge_darkness = read_fmt(">d", layer_effect_data) # Between 0 and 100
-            edge_blurring = read_fmt(">d", layer_effect_data) # Between 0 and 10.0
-
-            effects[param_name] = EffectWaterEdge(water_edge_enabled, edge_range, edge_opacity, edge_darkness, edge_blurring)
-
-        elif param_name == "EffectLine":
-           
-            section_size = read_fmt(">i", layer_effect_data)
-            extract_line_enabled = bool(read_fmt(">i", layer_effect_data))
-
-            black_fill_enabled = bool(read_fmt(">i", layer_effect_data))
-            black_fill_level = 255 - (read_fmt(">I", layer_effect_data) >> 24)
-
-            posterize_enabled = bool(read_fmt(">i", layer_effect_data))
-
-            assert read_fmt(">i", layer_effect_data) == 0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-            
-            line_width = read_fmt(">i", layer_effect_data)
-            
-            assert read_fmt(">i", layer_effect_data) == 0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-            effect_threshold = read_fmt(">i", layer_effect_data)
-
-            assert read_fmt(">d", layer_effect_data) == 5.0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-            assert read_fmt(">d", layer_effect_data) == 5.0, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-            assert read_fmt(">i", layer_effect_data) == 0x04, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-            directions_map = {0:ExtractLinesDirection.LEFT,
-                                1:ExtractLinesDirection.TOP,
-                                2:ExtractLinesDirection.RIGHT,
-                                3:ExtractLinesDirection.BOTTOM}
-
-            directions = ExtractLinesDirection(0)
-            
-            for _ in range(4):
-                direction = read_fmt(">i", layer_effect_data)
-                direction_enabled = bool(read_fmt(">i", layer_effect_data))
-
-                if direction_enabled:
-                    directions = directions | directions_map[direction]
-
-            posterize_count = read_fmt(">i", layer_effect_data)
-            posterizations = []
-
-            for _ in range(posterize_count):
-                posterize_input = read_fmt(">i", layer_effect_data) # Posterization input over 0..255
-                posterize_output = read_fmt(">i", layer_effect_data) # Postrize output over 1..99
-
-                posterizations.append((posterize_input, posterize_output))
-            
-            to_investigate = read_fmt(">i", layer_effect_data) # 1 or 0 for gradients
-            #assert read_fmt(">i", layer_effect_data) == 0x1, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-
-            anti_aliasing = read_fmt(">i", layer_effect_data) # Edge anti aliasing ?  Why is it here
-            assert read_fmt(">i", layer_effect_data) == 0xc8, "Please report to https://github.com/al3ks1s/clip-tools/issues"
-            
-            effects[param_name] = EffectLine(extract_line_enabled, black_fill_enabled, black_fill_level, posterize_enabled, line_width, effect_threshold, directions, posterize_count, posterizations, anti_aliasing)
-
-        else:
-            logger.warning(f"Unknown param name {param_name} effect parsing, might be due to incorrect parsing")
-
-    return effects
-
 def parse_text_attribute(text_layer_attribute_array):
 
     text_attributes = io.BytesIO(text_layer_attribute_array)
@@ -404,22 +266,29 @@ def parse_text_attribute(text_layer_attribute_array):
                 style_flag = read_fmt("<b", text_attributes)
                 default_style_flag = read_fmt("<b", text_attributes)
 
-                color = Color(read_fmt("<H", text_attributes) // 65535,
-                                read_fmt("<H", text_attributes) // 65535,
-                                read_fmt("<H", text_attributes) // 65535)
+                color = Color(
+                    read_fmt("<H", text_attributes) // 65535,
+                    read_fmt("<H", text_attributes) // 65535,
+                    read_fmt("<H", text_attributes) // 65535
+                )
 
                 font_scale = read_fmt("<d", text_attributes)
 
                 font = read_csp_unicode_le_str("<h", text_attributes)
 
-                runs.append(TextRun(start,
-                                length,
-                                style_flag,
-                                default_style_flag,
-                                color,
-                                font_scale,
-                                font))
+                runs.append(
+                    TextRun(
+                        start,
+                        length,
+                        style_flag,
+                        default_style_flag,
+                        color,
+                        font_scale,
+                        font
+                    )
+                )
 
+            text_params[TextAttribute(param_id)] = runs
             #print(runs)
 
         elif param_id == TextAttribute.ALIGN:
@@ -440,7 +309,9 @@ def parse_text_attribute(text_layer_attribute_array):
                 aligns.append(TextParam(TextAttribute(param_id),
                                 start,
                                 length,
-                                TextJustify(align)))
+                                TextAlign(align)))
+
+            text_params[TextAttribute(param_id)] = aligns
 
             #print(aligns)
 
@@ -464,7 +335,7 @@ def parse_text_attribute(text_layer_attribute_array):
                                     length,
                                     bool(underline)))
 
-            #print(underlines)
+            text_params[TextAttribute(param_id)] = underlines
 
         elif param_id == TextAttribute.STRIKE:
 
@@ -485,6 +356,8 @@ def parse_text_attribute(text_layer_attribute_array):
                                 length,
                                 bool(strike)))
 
+            text_params[TextAttribute(param_id)] = strikes
+            
             #print(strikes)
 
         elif param_id == TextAttribute.ASPECT_RATIO:
@@ -501,6 +374,8 @@ def parse_text_attribute(text_layer_attribute_array):
                 data_size = read_fmt("<i", text_attributes)
 
                 ratios.append((start, length, (read_fmt("<d", text_attributes), read_fmt("<d", text_attributes))))
+
+            text_params[TextAttribute(param_id)] = ratios
 
             #print(ratios)
 
@@ -519,6 +394,8 @@ def parse_text_attribute(text_layer_attribute_array):
 
                 params.append(read_fmt("<d", text_attributes))
 
+            text_params[TextAttribute(param_id)] = params
+
             #print(params)
 
         elif param_id == TextAttribute.CHARACTER_SPACING:
@@ -536,16 +413,22 @@ def parse_text_attribute(text_layer_attribute_array):
 
                 params.append(read_fmt("<d", text_attributes))
 
+            text_params[TextAttribute(param_id)] = params
             #print(params)
 
         elif param_id == TextAttribute.FONT:
             font = text_attributes.read(param_size)
             #print(font)
-        
+
+            text_params[TextAttribute(param_id)] = font
+
         elif param_id == TextAttribute.FONT_SIZE:
             font_size = read_fmt("<i", text_attributes) / 100
             #print(font_size)
-        
+
+            text_params[TextAttribute(param_id)] = font_size
+
+
         elif param_id == TextAttribute.GLOBAL_COLOR:
 
             color = Color(read_fmt("<I", text_attributes) >> 24,
@@ -553,10 +436,12 @@ def parse_text_attribute(text_layer_attribute_array):
                             read_fmt("<I", text_attributes) >> 24)
 
             #print(color)
+            text_params[TextAttribute(param_id)] = color
 
         elif param_id == TextAttribute.BBOX:
-            bbox = [read_fmt("<I", text_attributes) for _ in range(4)]
+            bbox = BBox.read("<I", text_attributes)
             #print(bbox)
+            text_params[TextAttribute(param_id)] = bbox
 
         elif param_id == TextAttribute.FONTS:
             num_fonts = read_fmt("<h", text_attributes)
@@ -572,14 +457,17 @@ def parse_text_attribute(text_layer_attribute_array):
             font_list.append([disp_name, font_name])
 
             #print(font_list)
+            text_params[TextAttribute(param_id)] = font_list
 
         elif param_id == TextAttribute.BOX_SIZE:
             box_size = [read_fmt("<i", text_attributes), read_fmt("<i", text_attributes)]
             #print(box_size)
+            text_params[TextAttribute(param_id)] = box_size
 
         elif param_id == TextAttribute.QUAD_VERTS:
             quad_verts = [read_fmt("<i", text_attributes) / 100 for _ in range(8)]
             #print(quad_verts)
+            text_params[TextAttribute(param_id)] = quad_verts
 
         elif param_id == TextAttribute.OUTLINE:
 
@@ -599,18 +487,22 @@ def parse_text_attribute(text_layer_attribute_array):
                 outlines.append((start, length, outline))
 
             #print(outlines)
+            text_params[TextAttribute(param_id)] = outlines
 
         elif param_id == TextAttribute.GLOBAL_STYLE:
             style_flag = TextStyle(read_fmt("<i", text_attributes))
             #print([style_flag])
+            text_params[TextAttribute(param_id)] = style_flag
 
         elif param_id in [TextAttribute.SKEW_ANGLE_1, TextAttribute.SKEW_ANGLE_2]:
             skew_angle = read_fmt("<i", text_attributes) / 10
             #print(skew_angle)
+            text_params[TextAttribute(param_id)] = skew_angle
 
         elif param_id == TextAttribute.GLOBAL_JUSTIFY:
-            value = TextJustify(read_fmt("<i", text_attributes))
+            value = TextAlign(read_fmt("<i", text_attributes))
             #print([value])
+            text_params[TextAttribute(param_id)] = value
 
         elif param_id == TextAttribute.ABSOLUTE_SPACING:
             # This is not spacing, something else but its also correlated to spacing?
@@ -619,41 +511,18 @@ def parse_text_attribute(text_layer_attribute_array):
 
         elif param_id == TextAttribute.READING_SETTING:
             # Part of reading settings : First short is a flag for Reading even/align, second is reading size ratio
-
-            reading_type = read_fmt("<h", text_attributes)
-            reading_ratio = read_fmt("<h", text_attributes)
-            adjust_reading = read_fmt("<h", text_attributes) / 100
-            space_between = read_fmt("<h", text_attributes) / 100
-            reading_space_free = read_fmt("<h", text_attributes) / 100
-
-            reading_font = read_csp_str("<h", text_attributes)
-
-            #print(param_id, reading_type, reading_ratio, adjust_reading, space_between, reading_space_free, reading_font)
+            text_params[TextAttribute(param_id)] = ReadingSetting.read(text_attributes)
 
         elif param_id == TextAttribute.BACKGROUND:
             # Background param
-            bg_enabled = read_fmt("<i", text_attributes)
-            
-            bg_color = Color(read_fmt("<I", text_attributes) >> 24,
-                read_fmt("<I", text_attributes) >> 24,
-                read_fmt("<I", text_attributes) >> 24)
 
-            bg_opacity = ((read_fmt("<I", text_attributes) >> 24) * 100) // 255
-
+            text_params[TextAttribute(param_id)] = TextBackground.read(text_attributes)
             #print(bg_enabled, bg_color, bg_opacity)
 
         elif param_id == TextAttribute.EDGE:
             # Edge data
-        
-            edge_enabled = read_fmt("<i", text_attributes)
 
-            edge_size = read_fmt("<i", text_attributes) // 1000
-
-            unk = read_fmt("<i", text_attributes)
-
-            edge_color = Color(read_fmt("<I", text_attributes) >> 24,
-                read_fmt("<I", text_attributes) >> 24,
-                read_fmt("<I", text_attributes) >> 24)
+            text_params[TextAttribute(param_id)] = TextEdge.read(text_attributes)
 
             #print(edge_enabled, edge_size, unk, edge_color)
 
@@ -662,23 +531,23 @@ def parse_text_attribute(text_layer_attribute_array):
             value = read_fmt("<i", text_attributes)
 
         elif param_id == TextAttribute.WRAP_FRAME:
-            value = read_fmt("<i", text_attributes)
+            text_params[TextAttribute(param_id)] = bool(read_fmt("<i", text_attributes))
 
         elif param_id == TextAttribute.WRAP_DIRECTION:
-            value = TextWrapDirection(read_fmt("<i", text_attributes))
+            text_params[TextAttribute(param_id)] = TextWrapDirection(read_fmt("<i", text_attributes))
 
         elif param_id == TextAttribute.HALF_WIDTH_PUNCT:
-            use_half_width = read_fmt("<i", text_attributes)
+            text_params[TextAttribute(param_id)] = bool(read_fmt("<i", text_attributes))
 
         elif param_id == TextAttribute.ROTATION_ANGLE:
-            value = read_fmt("<i", text_attributes) / 10
+            text_params[TextAttribute(param_id)] = read_fmt("<i", text_attributes) / 10
 
         elif param_id == TextAttribute.HORZ_IN_VERT:
             # TateChuYoko (Horizontal In Vertical) Never managed to make it work on my csp so idk what it does
-            value = read_fmt("<i", text_attributes)
+            text_params[TextAttribute(param_id)] = read_fmt("<i", text_attributes)
 
         elif param_id == TextAttribute.TEXT_ID:
-            value = read_fmt("<i", text_attributes)
+            text_params[TextAttribute(param_id)] = read_fmt("<i", text_attributes)
 
         elif param_id == TextAttribute.LINE_SPACING:
 
@@ -691,16 +560,21 @@ def parse_text_attribute(text_layer_attribute_array):
                 length = read_fmt("<i", text_attributes)
 
                 data_size = read_fmt("<i", text_attributes)
-                absolute_spacing_enabled = read_fmt("<h", text_attributes) 
+                absolute_spacing_enabled = read_fmt("<h", text_attributes)
                 # 1 is absolute, 0 is relative
 
                 relative_spacing = read_fmt("<d", text_attributes)
                 absolute_spacing = read_fmt("<d", text_attributes)
 
-                params.append((start, length, absolute_spacing_enabled, relative_spacing, absolute_spacing))
+                params.append((
+                    start,
+                    length,
+                    absolute_spacing_enabled,
+                    relative_spacing,
+                    absolute_spacing
+                ))
 
-            #print(params)
-
+            text_params[TextAttribute(param_id)] = params
 
         elif param_id == 39:
             # Tuple usually defining the text length, either on the first or second index
@@ -709,15 +583,17 @@ def parse_text_attribute(text_layer_attribute_array):
         elif param_id == 44:
             # No idea, consistently 8333
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
+            assert value == 8333
+            #print(decompositor(value))
         elif param_id == 43:
             # Consistently 50
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
+            assert value == 50
+            #print(value)
         elif param_id == 45:
             # Consistently 0
             value = read_fmt("<i", text_attributes)
-            #print(param_id, value)
+            assert value == 0
         elif param_id == 46:
             # 0
             value = read_fmt("<i", text_attributes)
@@ -811,6 +687,8 @@ def parse_vector(vector_blob):
         assert sign2 == 72, "Please report to https://github.com/al3ks1s/clip-tools/issues"
         assert sign4 == 88, "Please report to https://github.com/al3ks1s/clip-tools/issues"
 
+        #print((header_size, point_size))
+
         headers_sizes.append((header_size, point_size))
 
         num_points = read_fmt(">i", vector_data)
@@ -819,7 +697,7 @@ def parse_vector(vector_blob):
 
         flags.append(" ".join(decompositor(vector_flag)))
 
-        vector_bbox = BBox.read(vector_data)
+        vector_bbox = BBox.read(">i", vector_data)
 
         main_color = Color.read(vector_data)
         sub_color = Color.read(vector_data)
@@ -837,7 +715,7 @@ def parse_vector(vector_blob):
 
             frame_brush_id = read_fmt(">i", vector_data)
             frame_fill_id = read_fmt(">i", vector_data)
-            
+
             brush_radius = read_fmt(">d", vector_data)
             last_value_unk = read_fmt(">i", vector_data)
 
@@ -848,39 +726,42 @@ def parse_vector(vector_blob):
         for _ in range(num_points):
 
             pos = Position.read(vector_data)
-            point_bbox = BBox.read(vector_data)
-            
+            point_bbox = BBox.read(">i", vector_data)
+
             point_vector_flag = VectorPointFlag(read_fmt(">i", vector_data))
 
             # For testing
             remaining_point_size = point_size - (2*8) - (2*8) -4-4-4-4-4-4-4-4-4-4-4-4-4-4
-            
+
             point_scale = read_fmt(">f", vector_data)
             point_scale_2 = read_fmt(">f", vector_data)
             point_scale_3 = read_fmt(">f", vector_data)
+            #print(point_scale, point_scale_2, point_scale_3)
 
-            unk = read_fmt(">f", vector_data)
-            unk = read_fmt(">f", vector_data) # Dispersion? seems to define a statistical looking curve
-            
+            unk1 = read_fmt(">f", vector_data)
+            unk2 = read_fmt(">f", vector_data) # Dispersion? seems to define a statistical looking curve
+            #print(unk1, unk2)
+
             point_width = read_fmt(">f", vector_data)
             point_opacity = read_fmt(">f", vector_data)
 
-            # Only zeros? Not for frames
-            unk = read_fmt(">f", vector_data)
-            unk = read_fmt(">f", vector_data)
-            unk = read_fmt(">f", vector_data)
-            
+            # Some corner values for frames, angles? Doesn't seem to have effect
+            unk1 = read_fmt(">f", vector_data)
+            unk2 = read_fmt(">f", vector_data)
+            unk3 = read_fmt(">f", vector_data)
+            #print(unk1, unk2, unk3)
+
             # Unknown non zero parameter
-            unk = read_fmt(">f", vector_data)
-            unk = read_fmt(">f", vector_data)
-            
+            unk1 = read_fmt(">f", vector_data)
+            unk2 = read_fmt(">f", vector_data)
+            #print(unk1, unk2)
+
             # Only zeros
             unk = read_fmt(">i", vector_data)
-            
+            #print(unk)
 
             if vector_flag & VectorFlag.CURVE_QUADRATIC_BEZIER:
                 
-                # Speedline startpoint?
                 bezier_point = Position.read(vector_data)
                 remaining_point_size -= 16
 
@@ -894,30 +775,38 @@ def parse_vector(vector_blob):
             # For testing
             point_params = []
             for _ in range(remaining_point_size // 4):
-                point_params.append(read_fmt(">i", vector_data))            
+                point_params.append(read_fmt(">i", vector_data))
             if len(point_params) != 0:
                 logger.warning(f"Found new vector parameters : {point_params}")
 
 
-            points.append(VectorPoint(pos,
-                                        point_bbox,
-                                        point_vector_flag,
-                                        point_scale,
-                                        point_scale_2,
-                                        point_scale_3,
-                                        point_width,
-                                        point_opacity))
+            points.append(
+                VectorPoint(
+                    pos,
+                    point_bbox,
+                    point_vector_flag,
+                    point_scale,
+                    point_scale_2,
+                    point_scale_3,
+                    point_width,
+                    point_opacity
+                )
+            )
 
 
-        vector_lines.append(VectorLine(num_points,
-                                        vector_flag,
-                                        vector_bbox,
-                                        main_color,
-                                        sub_color,
-                                        global_opacity,
-                                        brush_id,
-                                        brush_radius,
-                                        points))
+        vector_lines.append(
+            VectorLine(
+                num_points,
+                vector_flag,
+                vector_bbox,
+                main_color,
+                sub_color,
+                global_opacity,
+                brush_id,
+                brush_radius,
+                points
+            )
+        )
 
     #print(set(flags))
     #print(set(headers_sizes))

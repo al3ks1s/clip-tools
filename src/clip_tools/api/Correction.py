@@ -4,8 +4,8 @@ from clip_tools.constants import CorrectionType
 import binascii
 import io
 import logging
-from clip_tools.utils import read_fmt
 
+from clip_tools.utils import read_fmt, attrs_range_builder
 from clip_tools.data_classes import ColorStop, Color, Position, CurveList, CurvePoint, LevelCorrection, Balance
 
 from collections import namedtuple
@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 @define
 class BrightnessContrast():
     
-    brightness: int = 0 # TODO Validators
-    contrast: int = 0
+    brightness: int = attrs_range_builder(int, 0, [-100, 100])
+    contrast: int = attrs_range_builder(int, 0, [-100, 100])
 
     def to_bytes(self):
         pass
@@ -47,7 +47,7 @@ class Level():
         while correction_data.tell() < section_size + 8:
             levels.append(LevelCorrection.read(correction_data))
 
-        # There is only 4 meaningful level tables, no idea why there are more
+        # There is only 4 meaningful level tables, no idea why there are more        
         return cls(levels[0],levels[1],levels[2],levels[3])
 
 @define
@@ -79,15 +79,15 @@ class ToneCurve():
             padding = correction_data.read(0x80 - (4 * points_count)) # Point count is limited to 32
 
             curves.append(points)
-
+            
         # There is only 4 meaningful point tables, no idea why there are more
         return cls(curves[0], curves[1], curves[2], curves[3])
 
 @define
 class HSL():
-    Hue: int = 0 # TODO Validators
-    Saturation: int = 0
-    Luminance: int = 0
+    Hue: int = attrs_range_builder(int, 0, [-180, 180])
+    Saturation: int = attrs_range_builder(int, 0, [-180, 180])
+    Luminance: int = attrs_range_builder(int, 0, [-180, 180])
 
     def to_bytes(self):
         pass
@@ -136,7 +136,7 @@ class ReverseGradient():
 
 @define
 class Posterization():
-    PosterizationLevel: int = 8 # TODO Validators
+    PosterizationLevel: int = attrs_range_builder(int, 8, [2, 20])
 
     def to_bytes(self):
         pass
@@ -149,7 +149,7 @@ class Posterization():
 
 @define
 class Threshold():
-    threshold_level: int = 128 # TODO Validators
+    threshold_level: int = attrs_range_builder(int, 127, [1, 255])
 
     def to_bytes(self):
         pass

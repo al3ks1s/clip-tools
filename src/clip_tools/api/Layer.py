@@ -9,6 +9,7 @@ from clip_tools.api.Correction import parse_correction_attributes
 from clip_tools.data_classes import Color
 from clip_tools.api.Ruler import Rulers
 from clip_tools.api.Mask import Mask
+from clip_tools.api.Vector import Vector, VectorPoint
 
 import io
 import zlib
@@ -95,6 +96,9 @@ class BaseLayer():
 
         if layer_data.GradationFillInfo is not None:
             return GradientLayer(clip_file, layer_data)
+
+        if layer_data.ResizableOriginalMipmap is not None:
+            return ImageLayer(clip_file, layer_data)
 
         logger.warning("Couldn't find proper layer type for %s. LayerType is %d" % (layer_data.LayerName, layer_data.LayerType))
         return BaseLayer(clip_file, layer_data)
@@ -255,7 +259,7 @@ class BaseLayer():
         return self
 
     def __repr__(self):
-        return "%s(%r)" % (self.__class__.__name__, self.LayerName)
+        return "%s(%r)" % (self.__class__.__name__, self.layer_name)
 
 class FolderMixin():
     _layers: list[BaseLayer]
@@ -272,7 +276,7 @@ class FolderMixin():
     def __setitem__(self, key, value) -> None:
         self._check_valid_layers(value)
         self._layers.__setitem__(key, value)
-        self._update_metadata()        
+        self._update_metadata()
 
     def __delitem__(self, key) -> None:
         self._layers.__delitem__(key)
@@ -360,8 +364,6 @@ class FolderMixin():
     
     def _check_valid_layers(self, layers: BaseLayer | Iterable[BaseLayer]) -> None:
 
-        return
-
         assert layers is not self, "Cannot add the group {} to itself.".format(self)
 
         if isinstance(layers, BaseLayer):
@@ -377,10 +379,16 @@ class FolderMixin():
                 )
 
     def _update_metadata(self):
-        
+
         for layer in self._layers:
             layer._parent = self
 
+        if len(self) != 0:
+            self._data.LayerFirstChildIndex = self[0]._data.MainId
+            
+        for i in range(len(self) - 1):
+            self[i]._data.LayerNextIndex = self[i + 1]._data.MainId
+            
     def descendants(self) -> Iterator[BaseLayer]:
         """
         Return a generator to iterate over all descendant layers.
@@ -437,7 +445,6 @@ class Folder(FolderMixin, BaseLayer):
     def is_open(self):
         return not self._data.LayerFolder & LayerFolder.CLOSED
 
-
     @classmethod
     def new(cls):
         pass
@@ -457,12 +464,31 @@ class PixelLayer(BaseLayer):
         parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
 
         #print(parsed_attribute)
-        return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
+        return decode_chunk_to_pil(
+            self.clip_file.data_chunks[offscreen.BlockData], 
+            parsed_attribute
+        )
 
-    
     @classmethod
     def frompil(cls, pil_im):
         pass
+
+class ImageLayer(BaseLayer):
+
+    def topil(self):
+
+        if self._get_render_offscreen(self.mipmaps[self._data.ResizableOriginalMipmap]).BlockData not in self.clip_file.data_chunks.keys():
+            return None
+
+        offscreen = self._get_render_offscreen(self.mipmaps[self._data.ResizableOriginalMipmap])
+
+        parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
+
+        #print(parsed_attribute)
+        return decode_chunk_to_pil(
+            self.clip_file.data_chunks[offscreen.BlockData],
+            parsed_attribute
+        )
 
 class PaperLayer(BaseLayer):
 
@@ -503,10 +529,9 @@ class TextLayer(BaseLayer):
         attr_array = self._get_text_attributes_array()
         text_array = self._get_strings_array()
 
-        #print(self.LayerName)
-
+        #print(self.layer_name)
         for attr, stri in zip(attr_array, text_array):
-            #print(stri)
+            #print(f"String length : {len(stri)}")
             parse_text_attribute(attr)
 
         #print()
@@ -518,30 +543,6 @@ class TextLayer(BaseLayer):
     @property
     def text(self):
         return self._data.TextLayerString
-
-    @property
-    def font(self):
-        pass
-
-    @property
-    def pix_size(self):
-        pass
-
-    @property
-    def style(self):
-        pass
-
-    @property
-    def justify(self):
-        pass
-
-    @property
-    def direction(self):
-        pass
-
-    @property
-    def color(self):
-        pass
 
     def _get_strings_array(self):
 
@@ -561,15 +562,12 @@ class TextLayer(BaseLayer):
         return array
 
     def _split_array(self, array):
-        
+
         data = io.BytesIO(array)
-
         arr = []
-
         while data.tell() < len(array):
 
             length = read_fmt("<i", data)
-
             arr.append(data.read(length))
 
         return arr
@@ -645,9 +643,19 @@ class VectorLayer(BaseLayer):
 
         vector_chunks = self.clip_file.sql_database.get_referenced_items("VectorObjectList", "LayerId", self._data.MainId)
 
+        self.lines = []
+
         for vector_chunk in vector_chunks.values():
-            #print(self.layer_name)
-            self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
+
+            vector_data = io.BytesIO(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
+
+            data_end = vector_data.seek(0, 2)
+            vector_data.seek(0, 0)
+
+            while vector_data.tell() < data_end - 16:
+                self.lines.append(Vector.read(vector_data))
+
+            #self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
 
 class FrameLayer(Folder, VectorLayer):
 
@@ -680,7 +688,6 @@ class BalloonLayer(VectorLayer):
      
 class AnimationFolder(Folder):
     pass
-
 
 class Layer3D(BaseLayer):
 
