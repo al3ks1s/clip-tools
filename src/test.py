@@ -13,7 +13,7 @@ import zlib
 workdir = '../tests/Samples'
 
 filelist = [f for f in os.listdir(workdir) if f.endswith(".clip")]
-filelist = ["Illustration-Rulers.clip"]
+filelist = ["random-copy.clip"]
 
 """
 
@@ -30,7 +30,7 @@ for f in filelist:
     print(f)
 
     with open(os.path.join(workdir, f), "rb") as fp:
-        
+
         proj = Project.open(fp)
 
         #print(list(proj.canvas.root_folder.descendants()))
@@ -53,20 +53,5 @@ for f in filelist:
         for layer in proj.canvas.root_folder.descendants():
             pass
         
-        proj.canvas.canvas_data.ShowGrid = 6
-        proj.canvas.canvas_data.GridDitch = 10000.0
-        
-        proj.canvas.canvas_data.write_to_db(proj.clip_file.sql_database)
-
-        proj.clip_file.sql_database.get_table("Canvas")[1].ShowGrid
-
-        data3D = ModelData3D.new()
-        data3D.MainId = 5
-        data3D.CanvasId = 8
-        data3D.Layer3DModelData = b'AAAAAAAAA'
-        
-        print(data3D)
-        data3D.write_to_db(proj.clip_file.sql_database)
-        print(proj.clip_file.sql_database.get_table("ModelData3D"))
-
-        data3D.write_to_db(proj.clip_file.sql_database)
+        #with open(os.path.join(workdir,"random-copy.clip"), "wb") as f:
+        #    proj.save(f)

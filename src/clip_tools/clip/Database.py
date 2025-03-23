@@ -4,7 +4,7 @@ import importlib
 
 from collections import namedtuple
 
-from clip_tools.utils import read_fmt
+from clip_tools.utils import read_fmt, write_fmt, write_bytes
 
 class Database:
 
@@ -15,19 +15,20 @@ class Database:
         if database is None:
             database = self.init_db()
 
-        self.database_file = tempfile.NamedTemporaryFile("wb")
+        self.database_file = tempfile.NamedTemporaryFile("wb", delete=False)
 
         #print("Writing temporary SQLi database to {}".format(self.database_file.name))
 
         self.database_file.write(database)
+        self.database_file.close()
 
         self.db_conn = sqlite3.connect(self.database_file.name)
         self.db_cursor = self.db_conn.cursor()
-              
+
         self.init_scheme()
 
     def init_scheme(self):
-        
+
         self.table_scheme = {}
 
         for table in self._execute_query("Select * from sqlite_schema where type == 'table';"):
@@ -44,7 +45,10 @@ class Database:
             self.param_scheme[row[1]][row[2]] = dict(zip(self.table_scheme["ParamScheme"][3:], row[3:]))
 
     def update_scheme(self, table):
-        self.table_scheme[table] = [x[0].removeprefix('_') for x in self._execute_query(f"SELECT name FROM pragma_table_info('{table}')")]
+        self.table_scheme[table] = [
+            x[0].removeprefix('_')
+            for x in self._execute_query(f"SELECT name FROM pragma_table_info('{table}')")
+        ]
 
     def init_db(self):
 
@@ -163,15 +167,28 @@ class Database:
         assert fp.read(8) == Database.chunk_signature
 
         database_size = read_fmt(">q", fp)
-
         database = fp.read(database_size)
 
         return cls(database)
 
     def write(self, fp):
-        pass
 
-    
+        fp.write(Database.chunk_signature)
+
+        offset = fp.tell()
+        write_fmt(fp, ">q", 0)
+
+        self.db_cursor.close()
+        self.db_conn.close()
+
+        with open(self.database_file.name, "rb") as db_file:
+            written = write_bytes(fp, db_file.read())
+        
+        fp.seek(offset)
+        write_fmt(fp, ">q", written)
+
+        fp.seek(0, 2)
+
     def _scheme_to_classes(self):
         # Cursed data class writing
         # Use only if needing to regenerate a ClipData.py

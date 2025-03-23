@@ -18,7 +18,6 @@ def read_fmt(fmt, fp):
         )
     return struct.unpack(fmt, data)[0]
 
-
 def write_fmt(fp, fmt, *args):
     """
     Writes data to ``fp`` according to ``fmt``.
@@ -32,7 +31,6 @@ def write_fmt(fp, fmt, *args):
             % (written, fmt_size)
         )
     return written
-
 
 def write_bytes(fp, data):
     """

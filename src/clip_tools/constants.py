@@ -266,7 +266,7 @@ class VectorFlag(IntFlag):
 class VectorPointFlag(IntFlag):
 
     NORMAL = 0
-    
+
     CORNER = 1
     FRAME = 2 # for a frame or to define mask?
 

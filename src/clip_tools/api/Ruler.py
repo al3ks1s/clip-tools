@@ -33,7 +33,7 @@ class Rulers():
         if layer._data.RulerVectorIndex is not None and layer._data.RulerVectorIndex > 0:
             
             ext_vector_ref = layer.clip_file.sql_database.get_table("VectorObjectList")[layer._data.RulerVectorIndex].VectorData
-            vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_datas
+            vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_datas.data
 
             vectors = parse_vector(vector_blob)
             rulers.append(VectorRuler(layer, vectors))

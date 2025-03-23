@@ -3,6 +3,7 @@ from attrs import define
 from clip_tools.utils import read_fmt
 from clip_tools.constants import VectorFlag, VectorPointFlag
 from clip_tools.data_classes import BBox, Color, Position
+import io
 
 @define
 class VectorPoint():
@@ -170,3 +171,20 @@ class Vector():
     @classmethod
     def new(cls):
         pass
+
+
+@define
+class VectorList():
+
+    vector_list: [Vector]
+
+    @classmethod
+    def read(cls, io_stream):
+
+        vector_data = io.BytesIO(io_stream)
+
+        data_end = vector_data.seek(0, 2)
+        vector_data.seek(0, 0)
+
+        while vector_data.tell() < data_end - 16:
+            self.lines.append(Vector.read(vector_data))

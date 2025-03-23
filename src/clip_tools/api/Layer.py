@@ -9,7 +9,7 @@ from clip_tools.api.Correction import parse_correction_attributes
 from clip_tools.data_classes import Color
 from clip_tools.api.Ruler import Rulers
 from clip_tools.api.Mask import Mask
-from clip_tools.api.Vector import Vector, VectorPoint
+from clip_tools.api.Vector import Vector, VectorPoint, VectorList
 
 import io
 import zlib
@@ -145,7 +145,7 @@ class BaseLayer():
 
     @property
     def blend_mode(self):
-        return self._data.LayerComposite # See constants.BlendMode
+        return BlendMode(self._data.LayerComposite) # See constants.BlendMode
 
     @blend_mode.setter
     def blend_mode(self, new_mode):
@@ -208,7 +208,7 @@ class BaseLayer():
         return mask_render_mipmap
 
     def _get_render_offscreen(self, mipmap):
-      
+
         mipmapsinfo = self.mipmap_infos[mipmap.BaseMipmapInfo]
         offscreen = self.offscreens[mipmapsinfo.Offscreen]
 
@@ -361,7 +361,7 @@ class FolderMixin():
         """
 
         return self._layers.count(layer)
-    
+
     def _check_valid_layers(self, layers: BaseLayer | Iterable[BaseLayer]) -> None:
 
         assert layers is not self, "Cannot add the group {} to itself.".format(self)
@@ -385,7 +385,7 @@ class FolderMixin():
 
         if len(self) != 0:
             self._data.LayerFirstChildIndex = self[0]._data.MainId
-            
+
         for i in range(len(self) - 1):
             self[i]._data.LayerNextIndex = self[i + 1]._data.MainId
             
@@ -646,14 +646,7 @@ class VectorLayer(BaseLayer):
         self.lines = []
 
         for vector_chunk in vector_chunks.values():
-
-            vector_data = io.BytesIO(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
-
-            data_end = vector_data.seek(0, 2)
-            vector_data.seek(0, 0)
-
-            while vector_data.tell() < data_end - 16:
-                self.lines.append(Vector.read(vector_data))
+            self.lines.append(VectorList.read(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas.data))
 
             #self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
 

@@ -36,8 +36,6 @@ class ClipStudioFile:
         sql_database = Database.read(fp)
         footer = Footer.read(fp)
 
-        #print(f"File size {file_size}, {fp.tell()}, difference: {file_size - fp.tell()}")
-
         return cls(file_size, header_offset, header, data_chunks, sql_database)
 
     def write(self, fp):
