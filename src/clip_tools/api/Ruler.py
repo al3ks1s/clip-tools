@@ -4,7 +4,7 @@ from attrs import define
 from clip_tools.clip.ClipData import RulerParallel, RulerCurveParallel, RulerMultiCurve, RulerEmit, RulerCurveEmit, RulerConcentricCircle, RulerGuide, RulerVanishPoint, RulerPerspective, RulerSymmetry
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
 import logging
-from clip_tools.data_classes import Position, VectorPoint
+from clip_tools.data_classes import Position
 import importlib
 import io
 from clip_tools.utils import read_fmt, read_csp_unicode_str
@@ -31,7 +31,7 @@ class Rulers():
         manager = None
 
         if layer._data.RulerVectorIndex is not None and layer._data.RulerVectorIndex > 0:
-            
+
             ext_vector_ref = layer.clip_file.sql_database.get_table("VectorObjectList")[layer._data.RulerVectorIndex].VectorData
             vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_datas.data
 

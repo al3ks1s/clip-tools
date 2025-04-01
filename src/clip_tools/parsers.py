@@ -5,7 +5,7 @@ from PIL import Image
 from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, decompositor
 
 from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextAlign, TextStyle, TextOutline, TextWrapDirection, VectorFlag, VectorPointFlag
-from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, VectorPoint, VectorLine, TextRun, TextParam, BBox, RulerCurvePoint, ReadingSetting, TextBackground, TextEdge
+from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, TextRun, TextParam, BBox, RulerCurvePoint, ReadingSetting, TextBackground, TextEdge
 
 from collections import namedtuple
 
@@ -110,7 +110,11 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
 
     total_channel_count = buffer_channel_count + alpha_channel_count
 
-    im = Image.new(channel_to_pil(total_channel_count), (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height), 255*offscreen_attributes.default_fill_color)
+    im = Image.new(
+        channel_to_pil(total_channel_count),
+        (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height),
+        255*offscreen_attributes.default_fill_color
+    )
 
     block_area = block_width * block_height
 
@@ -131,11 +135,26 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
                     buffer_block_byte_count = block_area // (8 // (buffer_bit_depth // buffer_channel_count))
 
                     if monochrome:
-                        block_buffer = Image.frombuffer("1", (block_width, block_height), pix_bytes[buffer_block_byte_count * alpha_channel_count:buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)])
+                        block_buffer = Image.frombuffer(
+                            "1", 
+                            (block_width, block_height),
+                            pix_bytes[
+                                buffer_block_byte_count * alpha_channel_count:
+                                buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)
+                            ]
+                        )
+
                         block_buffer = block_buffer.convert(channel_to_pil(buffer_channel_count))
 
                     else:
-                        block_buffer = Image.frombuffer(channel_to_pil(buffer_channel_count), (block_width, block_height), pix_bytes[buffer_block_byte_count * alpha_channel_count:buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)])
+                        block_buffer = Image.frombuffer(
+                            channel_to_pil(buffer_channel_count),
+                            (block_width, block_height),
+                            pix_bytes[
+                                buffer_block_byte_count * alpha_channel_count:
+                                buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)
+                            ]
+                        )
 
                     buffer_channels = block_buffer.split()
                     block_buffer = buffer_channels[:3][::-1]
@@ -147,11 +166,20 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
                     alpha_byte_count = block_area // (8 // alpha_bit_depth)
 
                     if monochrome:
-                        block_alpha = Image.frombuffer("1", (block_width, block_height), pix_bytes[:alpha_byte_count * alpha_channel_count])
+                        block_alpha = Image.frombuffer(
+                            "1", 
+                            (block_width, block_height), 
+                            pix_bytes[:alpha_byte_count * alpha_channel_count]
+                        )
+
                         block_alpha = block_alpha.convert(channel_to_pil(alpha_channel_count))
                     else:
 
-                        block_alpha = Image.frombuffer(channel_to_pil(alpha_channel_count), (block_width, block_height), pix_bytes[:alpha_byte_count * alpha_channel_count])
+                        block_alpha = Image.frombuffer(
+                            channel_to_pil(alpha_channel_count),
+                            (block_width, block_height),
+                            pix_bytes[:alpha_byte_count * alpha_channel_count]
+                        )
 
                     final_channels.extend(block_alpha.split())
 
@@ -164,81 +192,6 @@ def decode_chunk_to_pil(chunk, offscreen_attributes):
 
     return im
 
-def parse_gradient_info(gradation_fill_info):
-
-    gradient_data = io.BytesIO(gradation_fill_info)
-
-    gradient_data_size = read_fmt(">i", gradient_data)
-    unk1 = read_fmt(">i", gradient_data) # Always '0x02'
-
-    gradient_info = {}
-
-    while gradient_data.tell() < gradient_data_size:
-
-        param_name = read_csp_unicode_str(">i", gradient_data)
-
-        if param_name == "GradationData":
-
-            section_size = read_fmt(">i", gradient_data)
-            unk2 = read_fmt(">i", gradient_data)
-            unk3 = read_fmt(">i", gradient_data)
-            num_color_stop = read_fmt(">i", gradient_data)
-            unk4 = read_fmt(">i", gradient_data)
-
-            color_stops = []
-
-            for _ in range(num_color_stop):
-
-                r,g,b = (read_fmt(">I", gradient_data) >> 24 for _ in range(3))
-                rgb = Color(r,g,b)
-
-                opacity = read_fmt(">I", gradient_data) >> 24
-                is_current_color = read_fmt(">i", gradient_data)
-                position = read_fmt(">i", gradient_data) * 100 // 32768
-                num_curve_points = read_fmt(">i", gradient_data)
-
-                curve_points = []
-
-                color_stops.append(ColorStop(rgb, opacity, is_current_color, position, num_curve_points, curve_points))
-
-            for color_stop in color_stops:
-                if color_stop.num_curve_points != 0:
-                    for _ in range(color_stop.num_curve_points):
-                        point = CurvePoint(read_fmt(">d", gradient_data), read_fmt(">d", gradient_data))
-                        
-                        # To look into
-
-                        color_stop.curve_points.append(point)
-
-            gradient_info["color_stops"] = color_stops
-
-        if param_name == "GradationSettingAdd0001":
-
-            section_size = read_fmt(">i", gradient_data)
-
-            gradient_info["is_flat"] = bool(read_fmt(">i", gradient_data))
-
-            r,g,b = (read_fmt(">I", gradient_data) >> 24 for _ in range(3))
-            gradient_info["fill_color"] = Color(r,g,b)
-
-            read_fmt(">i", gradient_data)
-
-        if param_name == "GradationSetting":
-
-            gradient_info["repeat_mode"] = GradientRepeatMode(read_fmt(">i", gradient_data))
-            gradient_info["shape"] = GradientShape(read_fmt(">i", gradient_data))
-
-            gradient_info["anti_aliasing"] = bool(read_fmt(">i", gradient_data))
-
-            gradient_info["diameter"] = read_fmt(">d", gradient_data)
-            gradient_info["ellipse_diameter"] = read_fmt(">d", gradient_data)
-
-            gradient_info["rotation_angle"] = read_fmt(">d", gradient_data)
-
-            gradient_info["start"] = Position(read_fmt(">d", gradient_data), read_fmt(">d", gradient_data))
-            gradient_info["end"] = Position(read_fmt(">d", gradient_data), read_fmt(">d", gradient_data))
-
-    return gradient_info
 
 def parse_text_attribute(text_layer_attribute_array):
 
@@ -646,6 +599,7 @@ def parse_text_attribute(text_layer_attribute_array):
 
     return text_params
 
+# For rulers
 def parse_point_data(point_data):
     points_bytes = io.BytesIO(point_data)
 

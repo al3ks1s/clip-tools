@@ -1,4 +1,7 @@
 import attr
+from attr import field
+
+from enum import IntEnum, IntFlag
 
 @attr.define
 class ClipData():
@@ -7,15 +10,20 @@ class ClipData():
 
     # For API defined objects
     @classmethod
-    def new(cls, **kwarg):
+    def new(cls, db, **kwarg):
 
-        PW_ID = -1
+        PW_ID = db.get_free_pw_id(cls.__name__)
+
+        obj = None
 
         if "MainId" in dir(cls):
-            MainId = -1
-            return cls(PW_ID, MainId, **kwarg)
-    
-        return cls(PW_ID, **kwarg)
+            MainId = db.get_free_main_id(cls.__name__)
+            obj = cls(PW_ID, MainId, **kwarg)
+        else:
+            obj = cls(PW_ID, **kwarg)
+
+        obj.write_to_db(db)
+        return obj
 
     def write_to_db(self, db):
 
@@ -45,7 +53,6 @@ class ClipData():
 
         data_to_add = {attribute:attr.asdict(self)[attribute] for attribute in table_scheme}
 
-        print(data_to_add)
         ids = [x[0] for x in db._execute_query(f"Select _PW_ID from {class_name}")]
 
         if self.PW_ID not in ids:

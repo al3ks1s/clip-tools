@@ -8,7 +8,6 @@ import io
 @define
 class VectorPoint():
     position: Position
-    bbox: BBox
 
     point_flag: VectorPointFlag
 
@@ -20,6 +19,26 @@ class VectorPoint():
     opacity: float
 
     bezier_points: [Position]
+
+    @property
+    def bbox(self):
+        return BBox(
+            self.position.x - 10,
+            self.position.y - 10,
+            self.position.x + 10,
+            self.position.y + 10
+        )
+
+    @property
+    def corner(self):
+        return self.point_flag & VectorPointFlag.CORNER
+
+    @corner.setter
+    def corner(self, is_corner: bool):
+        pass
+
+    def switch_corner(self):
+        self.point_flag = self.point_flag ^ VectorPointFlag.CORNER
 
     def write(self, io_stream):
         pass
@@ -45,21 +64,18 @@ class VectorPoint():
         unk1 = read_fmt(">f", io_stream)
         unk2 = read_fmt(">f", io_stream)
         unk3 = read_fmt(">f", io_stream)
-        #print(unk1, unk2, unk3)
 
         # Unknown non zero parameter
         unk1 = read_fmt(">f", io_stream)
         unk2 = read_fmt(">f", io_stream)
-        #print(unk1, unk2)
 
         # Only zeros
         unk = read_fmt(">i", io_stream)
-        #print(unk)
 
         bezier_points = []
 
         if vector_flag & VectorFlag.CURVE_QUADRATIC_BEZIER:
-            
+
             bezier_points.append(Position.read(io_stream))
 
         if vector_flag & VectorFlag.CURVE_CUBIC_BEZIER:
@@ -69,7 +85,6 @@ class VectorPoint():
 
         return cls(
             pos,
-            point_bbox,
             point_vector_flag,
             point_scale,
             point_scale_2,
@@ -83,16 +98,13 @@ class VectorPoint():
     def new(cls, position, flag):
         return cls(
             position,
-            BBox(position.x - 10, position.y - 10, position.x + 10, position.y + 10),
             flag
         )
 
 @define
 class Vector():
 
-    point_count: int
     vector_flag: VectorFlag
-    vector_bbox: BBox
 
     main_color: Color
     sub_color: Color
@@ -105,6 +117,14 @@ class Vector():
     fill_style_id: int
 
     points: [VectorPoint]
+
+    @property
+    def point_count(self):
+        return len(self.points)
+
+    @property
+    def bbox(self):
+        pass # return the composite of all points bbox
 
     def write(self, io_stream):
         pass
@@ -130,7 +150,7 @@ class Vector():
         main_color = Color.read(io_stream)
         sub_color = Color.read(io_stream)
 
-        global_opacity = read_fmt(">d", io_stream)
+        opacity = read_fmt(">d", io_stream)
 
         brush_id = read_fmt(">i", io_stream)
         brush_radius = 0
@@ -156,12 +176,10 @@ class Vector():
             points.append(VectorPoint.read(io_stream, vector_flag))
 
         return cls(
-            num_points,
             vector_flag,
-            vector_bbox,
             main_color,
             sub_color,
-            global_opacity,
+            opacity,
             brush_id,
             brush_radius,
             frame_fill_id,
@@ -176,10 +194,12 @@ class Vector():
 @define
 class VectorList():
 
-    vector_list: [Vector]
+    _vector_list: [Vector]
 
     @classmethod
     def read(cls, io_stream):
+
+        lines = []
 
         vector_data = io.BytesIO(io_stream)
 
@@ -187,4 +207,13 @@ class VectorList():
         vector_data.seek(0, 0)
 
         while vector_data.tell() < data_end - 16:
-            self.lines.append(Vector.read(vector_data))
+            lines.append(Vector.read(vector_data))
+
+        return cls(lines)
+
+    @classmethod
+    def new(cls):
+        return cls([])
+
+    def new_line(self):
+        pass

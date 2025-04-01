@@ -48,25 +48,65 @@ def write_bytes(fp, data):
     return written
 
 def read_csp_unicode_str(size_fmt, f):
-    str_size = read_fmt(size_fmt, f)  
-    if str_size == None:
+    str_size = read_fmt(size_fmt, f)
+    if str_size is None:
         return None
     string_data = f.read(2 * str_size)
     return string_data.decode('UTF-16-BE')
 
 def read_csp_unicode_le_str(size_fmt, f):
-    str_size = read_fmt(size_fmt, f)  
-    if str_size == None:
+    str_size = read_fmt(size_fmt, f)
+    if str_size is None:
         return None
     string_data = f.read(2 * str_size)
     return string_data.decode('UTF-16-LE')
 
 def read_csp_str(size_fmt, f):
-    str_size = read_fmt(size_fmt, f)  
-    if str_size == None:
+    str_size = read_fmt(size_fmt, f)
+    if str_size is None:
         return None
     string_data = f.read(str_size)
     return string_data.decode('UTF-8')
+
+def write_csp_unicode_str(size_fmt, f, string_data):
+
+    str_to_write = string_data.encode('UTF-16-BE')
+    written = write_fmt(f, size_fmt, len(str_to_write))
+    written += write_bytes(f, str_to_write)
+
+    if written == len(str_to_write) + struct.calcsize(size_fmt):
+        raise IOError(
+            "Failed to write data: written=%d, expected=%d." % (written, len(str_to_write) + struct.calcsize(size_fmt))
+        )
+
+    return written
+
+def write_csp_unicode_le_str(size_fmt, f, string_data):
+
+    str_to_write = string_data.encode('UTF-16-LE')
+    written = write_fmt(f, size_fmt, len(str_to_write))
+    written += write_bytes(f, str_to_write)
+
+    if written == len(str_to_write) + struct.calcsize(size_fmt):
+        raise IOError(
+            "Failed to write data: written=%d, expected=%d." % (written, len(str_to_write) + struct.calcsize(size_fmt))
+        )
+
+    return written
+
+def write_csp_str(size_fmt, f, string_data):
+
+    str_to_write = string_data.encode('UTF-8')
+    written = write_fmt(f, size_fmt, len(str_to_write))
+    written += write_bytes(f, str_to_write)
+
+    if written == len(str_to_write) + struct.calcsize(size_fmt):
+        raise IOError(
+            "Failed to write data: written=%d, expected=%d." % (written, len(str_to_write) + struct.calcsize(size_fmt))
+        )
+
+    return written
+
 
 def pack(fmt, *args):
     fmt = str(">" + fmt)
@@ -85,11 +125,12 @@ def decompositor(x):
         i <<= 1
     return powers
 
-# Attrs converterss
+# Attrs converters
 def validate_range(value, field):
 
     range_ = field.metadata["range"]
     return min(max(value, range_[0]), range_[1])
+
 
 def attrs_range_builder(type_, default, range_):
     return attrs.field(

@@ -2,7 +2,7 @@ from clip_tools.clip.ClipStudioFile import ClipStudioFile
 from clip_tools.api.Canvas import Canvas
 
 class Project():
-    
+
     def __init__(self, clip_file, data):
         self.clip_file = clip_file
         self._data = data
@@ -16,12 +16,11 @@ class Project():
 
     @classmethod
     def open(cls, fp):
-        
+
         clip_file = ClipStudioFile.read(fp)
         data = clip_file.sql_database.fetch_project_data()
 
         return cls(clip_file, data)
-
 
     @classmethod
     def new(cls, fp):

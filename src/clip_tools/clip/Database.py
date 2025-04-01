@@ -183,7 +183,7 @@ class Database:
 
         with open(self.database_file.name, "rb") as db_file:
             written = write_bytes(fp, db_file.read())
-        
+
         fp.seek(offset)
         write_fmt(fp, ">q", written)
 

@@ -94,13 +94,12 @@ class LayerMasking(IntFlag):
     UNK = 16 # Use Vector line as mask delimitation?
     FOLDER = 32
     FRAME = 64
-    
 
 class LayerVisibility(IntFlag):
     VISIBLE = 1
     MASK_VISIBLE = 2
     RULER_VISIBLE = 4
-    
+
 class LayerFolder(IntFlag):
     FOLDER = 1
     CLOSED = 16
@@ -118,14 +117,70 @@ class LayerSelect(IntFlag):
     pass
 
 class VectorNormalType(IntEnum):
-    NORMAL = 0
-    UNKN = 1 # Probably part of the VectorNormalFillIndex
+    STROKE = 0
+    BALLOON = 1 # Probably part of the VectorNormalFillIndex
     SPEEDLINLES = 2
-    FRAMEBORDER = 3
+    FRAMEBORDER = 3 # Will take its values in VectorNormalBalloonIndex
 
+class DrawToMaskOffscreenType(IntEnum):
+    FRAME = 21
+
+class DrawToMaskMipmapType(IntEnum):
+    FRAME = 10
+
+class DrawToRenderOffscreenType(IntEnum):
+    VECTOR = 10
+    BALLOON = 11
+    EXT_IMAGE = 20
+    TEXT = 40
+    GRADIENT = 60
+    PAPER = 61
+
+class DrawToRenderMipmapType(IntEnum):
+    EXT_IMAGE = 20
+    PAPER = 31
+    GRADIENT = 32
+    TEXT = 40
+
+# Same for:
+# MoveOffsetAndExpandType
+# FixOffsetAndExpandType (No TEXT)
+# RenderBoundForLayerMoveType (No TEXT, FRAME)
+# Different types of layers don't have all of them
+class OffsetAndExpandType(IntEnum):
+    EXT_IMAGE = 10
+    GRADIENT = 30
+    PAPER = 31
+    FRAME = 40
+    TEXT = 50
+
+# Same for :
+# EffectRenderType
+# EffectLayerRenderType
+# EffectReferAreaType
+# EffectSetUpdateRectType
+# EffectOffscreenFixType
+# EffectOffscreenMoveType
 class EffectRenderType(IntEnum):
-    pass
+    GRADIENT = 10 # Very useful
 
+# Same for:
+# SetRenderThumbnailInfoType
+# DrawRenderThumbnailType
+class RenderThumbnailType(IntEnum):
+    CORRECTION = 20
+    GRADIENT = 30
+    PAPER = 31
+
+class SpecialRenderType(IntEnum):
+    CORRECTION = 13
+    FRAME = 14
+    PAPER = 20
+
+class MaterialContentType(IntEnum):
+    FRAME = 100
+    TEXT = 110
+    FRAME_BACKGROUND = 160 # Frame backgrounds are gradients layers with extra steps
 
 class GradientRepeatMode(IntEnum):
     CLIP = 0
@@ -252,7 +307,7 @@ class VectorFlag(IntFlag):
     RULER = 4
     FRAME = 8
 
-    # Defines the Bezier curve type
+    # Defines the curve type
     CURVE_STRAIGHT = 16
     CURVE_QUADRATIC_BEZIER = 32
     CURVE_CUBIC_BEZIER = 64
