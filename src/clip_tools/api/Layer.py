@@ -1,16 +1,18 @@
 from clip_tools.clip.ClipStudioFile import ClipStudioFile
 from clip_tools.utils import read_fmt, decompositor
-from clip_tools.clip.ClipData import Layer
-from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder, LayerLock, LayerMasking, VectorNormalType, DrawToMaskMipmapType, DrawToMaskOffscreenType, DrawToRenderMipmapType, DrawToRenderOffscreenType, OffsetAndExpandType, EffectRenderType, SpecialRenderType, MaterialContentType, RenderThumbnailType
+from clip_tools.clip.ClipData import Layer, Mipmap, MipmapInfo, Offscreen
+from clip_tools.constants import BlendMode, LayerType, LayerVisibility, LayerFolder, LayerLock, LayerMasking, VectorNormalType, DrawToMaskMipmapType, DrawToMaskOffscreenType, DrawToRenderMipmapType, DrawToRenderOffscreenType, OffsetAndExpandType, EffectRenderType, SpecialRenderType, MaterialContentType, RenderThumbnailType, ColorMode, OffsetAndExpandType
 from clip_tools.parsers import *
 from clip_tools.api.Gradient import Gradient
 from clip_tools.api.Effect import LayerEffects
 from clip_tools.api.Correction import parse_correction_attributes
-from clip_tools.data_classes import Color
+from clip_tools.data_classes import Color, OffscreenAttribute
 from clip_tools.api.Ruler import Rulers
 from clip_tools.api.Mask import Mask
 from clip_tools.api.Vector import Vector, VectorPoint, VectorList
-
+from clip_tools.api.Text import Text
+from clip_tools.api import Correction
+import binascii
 import uuid
 import io
 import zlib
@@ -51,9 +53,7 @@ class BaseLayer():
             self.effects = LayerEffects.from_bytes(self._data.LayerEffectInfo)
 
         if self.has_mask:
-            mask_offscreen_attribute = parse_offscreen_attribute(self._get_mask_offscreen_attributes())
             mask_offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
-
             self.mask = Mask(self, self.mask_type, mask_offscreen)
 
         if self.has_ruler:
@@ -107,8 +107,14 @@ class BaseLayer():
     @classmethod
     def _new(cls, clip_file, layer_name = "Layer"):
 
+        canvas = clip_file.sql_database.get_table("Canvas")[1]
+
+        uuid_str = str(uuid.uuid4())
+
+        uuid_str = uuid_str[-2:] + uuid_str[:-2]
+
         # Big default init
-        return Layer.new(
+        layer = Layer.new(
             clip_file.sql_database,
             CanvasId = 1,
             LayerName = layer_name,
@@ -136,12 +142,64 @@ class BaseLayer():
             LayerSelect = 0,
             LayerNextIndex = 0,
             LayerFirstChildIndex = 0,
-            LayerUuid = str(uuid.uuid4()),
+            LayerUuid = uuid_str,
             LayerRenderMipmap = 0,
             LayerLayerMaskMipmap = 0,
             LayerRenderThumbnail = 0,
             LayerLayerMaskThumbnail = 0
         )
+
+        scales = [100.0, 50.0, 25.0, 12.5, 6.25]
+
+        offscreens = []
+        mipmap_infos = []
+
+        for scale in scales:
+
+            offscreen = Offscreen.new(
+                clip_file.sql_database,
+                CanvasId = 1,
+                LayerId = layer.MainId,
+                Attribute = OffscreenAttribute.new(
+                    int((canvas.CanvasWidth * scale) // 100),
+                    int((canvas.CanvasHeight * scale) // 100),
+                    ColorMode(canvas.CanvasDefaultColorTypeIndex)
+                ).tobytes(),
+                BlockData = DataChunk.new_id()
+            )
+
+            offscreens.append(offscreen)
+
+            mipinfo = MipmapInfo.new(
+                clip_file.sql_database,
+                CanvasId = 1,
+                LayerId = layer.MainId,
+                ThisScale = scale,
+                Offscreen = offscreen.MainId,
+                NextIndex = 0
+            )
+
+            mipmap_infos.append(mipinfo)
+
+        mipmap = Mipmap.new(
+            clip_file.sql_database,
+            CanvasId = 1,
+            LayerId = layer.MainId,
+            MipmapCount = 5,
+            BaseMipmapInfo = mipmap_infos[0].MainId
+        )
+
+        for i in range(len(mipmap_infos) - 1):
+            mipmap_infos[i].NextIndex = mipmap_infos[i + 1].MainId
+            mipmap_infos[i].save()
+
+        layer.LayerRenderMipmap = mipmap.MainId
+        layer.save()
+
+        return layer
+
+    def save(self):
+        self._data.save()
 
     @property
     def has_ruler(self):
@@ -226,15 +284,26 @@ class BaseLayer():
     def unlock(self):
         self._data.LayerLock = 0
 
-    def render_mask(self):
-
-        if not self.has_mask:
+    @property
+    def palette(self):
+        if self._data.LayerUsePaletteColor != 1:
             return None
 
-        offscreen = self._get_render_offscreen(self._get_mask_render_mipmap())
-        parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
+        return Color(self._data.LayerPaletteRed >> 24,
+                self._data.LayerPaletteGreen >> 24,
+                self._data.LayerPaletteBlue >> 24)
 
-        return decode_chunk_to_pil(self.clip_file.data_chunks[offscreen.BlockData], parsed_attribute)
+    @palette.setter
+    def palette(self, new_palette: Color):
+
+        self._data.LayerUsePaletteColor = 1
+
+        self._data.LayerPaletteRed = new_palette.r << 24
+        self._data.LayerPaletteGreen = new_palette.g << 24
+        self._data.LayerPaletteBlue = new_palette.b << 24
+
+    def toggle_palette(self):
+        self._data.LayerUsePaletteColor = self._data.LayerUsePaletteColor ^ 1
 
     # Metadata functions
     def _get_render_mipmap(self):
@@ -427,7 +496,7 @@ class FolderMixin():
                 )
 
     def _update_metadata(self):
-
+        
         for layer in self._layers:
             layer._parent = self
 
@@ -501,7 +570,7 @@ class Folder(FolderMixin, BaseLayer):
         layer_data.LayerMasking = LayerMasking.FOLDER
         layer_data.LayerFolder = 1
 
-        layer_data.write_to_db(clip_file.sql_database)
+        layer_data.save()
 
         return cls(clip_file, layer_data)
 
@@ -514,14 +583,26 @@ class RootFolder(Folder):
         layer_data = BaseLayer._new(clip_file, layer_name)
 
         layer_data.LayerType = LayerType.ROOT_FOLDER
-        layer_data.LayerMasking = LayerMasking.FOLDER
+        layer_data.LayerMasking = LayerMasking.BLOCK_APPLY_MASK
         layer_data.LayerFolder = 1
 
-        layer_data.write_to_db(clip_file.sql_database)
+        layer_data.save()
 
         return cls(clip_file, layer_data)
 
 class PixelLayer(BaseLayer):
+
+    @classmethod
+    def new(cls, clip_file, name = "Layer"):
+
+        canvas = clip_file.sql_database.get_table("Canvas")[1]
+
+        pil_im = Image.new(
+            ColorMode.pil_mode(canvas.CanvasDefaultColorTypeIndex),
+            (int(canvas.CanvasWidth), int(canvas.CanvasHeight)),
+        )
+
+        return PixelLayer.frompil(clip_file, pil_im, name)
 
     def topil(self):
 
@@ -529,18 +610,39 @@ class PixelLayer(BaseLayer):
             return None
 
         offscreen = self._get_render_offscreen(self._get_render_mipmap())
+        parsed_attribute = OffscreenAttribute.read(io.BytesIO(offscreen.Attribute))
 
-        parsed_attribute = parse_offscreen_attribute(offscreen.Attribute)
-
-        #print(parsed_attribute)
         return decode_chunk_to_pil(
             self.clip_file.data_chunks[offscreen.BlockData],
             parsed_attribute
         )
 
     @classmethod
-    def frompil(cls, pil_im):
-        pass
+    def frompil(cls, clip_file, pil_im, name = "Pixel"):
+
+        layer_data = BaseLayer._new(clip_file, name)
+        layer_data.LayerType = LayerType.PIXEL
+        layer_data.LayerColorTypeIndex = ColorMode.from_pil(pil_im.mode)
+        layer_data.LayerColorTypeBlackChecked = 1
+        layer_data.LayerColorTypeWhiteChecked = 1
+
+        chunk, offscreen_attribute = encode_pil_to_chunk(pil_im)
+
+        mipmap = clip_file.sql_database.get_referenced_items("Mipmap", "LayerId", layer_data.MainId)
+        mipinfos = clip_file.sql_database.get_referenced_items("MipmapInfo", "LayerId", layer_data.MainId)
+        offscreens = clip_file.sql_database.get_referenced_items("Offscreen", "LayerId", layer_data.MainId)
+
+        main_offscreen = offscreens[mipinfos[mipmap[layer_data.LayerRenderMipmap].BaseMipmapInfo].Offscreen]
+
+        main_offscreen.Attribute = offscreen_attribute.tobytes()
+        main_offscreen.BlockData = chunk.external_chunk_id
+
+        main_offscreen.save()
+
+        clip_file.data_chunks[chunk.external_chunk_id] = chunk
+
+        return cls(clip_file, layer_data)
+
 
 class ImageLayer(BaseLayer):
 
@@ -569,7 +671,7 @@ class PaperLayer(BaseLayer):
 
     @color.setter
     def color(self, new_color: Color):
-        self._data.DrawColorMainRed = new_color.r << 24 
+        self._data.DrawColorMainRed = new_color.r << 24
         self._data.DrawColorMainGreen = new_color.g << 24
         self._data.DrawColorMainBlue = new_color.b << 24
 
@@ -580,17 +682,20 @@ class PaperLayer(BaseLayer):
 
         layer_data.LayerType = LayerType.PAPER
 
-        layer_data.DrawToRenderOffscreenType = DrawToRenderOffscreenType.PAPER.value
-        layer_data.SpecialRenderType = SpecialRenderType.PAPER.value
-        layer_data.DrawToRenderMipmapType = DrawToRenderMipmapType.PAPER.value
-        layer_data.MoveOffsetAndExpandType = OffsetAndExpandType.PAPER.value
-        layer_data.FixOffsetAndExpandType = OffsetAndExpandType.PAPER.value
-        layer_data.RenderBoundForLayerMoveType = OffsetAndExpandType.PAPER.value
-        layer_data.SetRenderThumbnailInfoType = OffsetAndExpandType.PAPER.value
+        layer_data.DrawToRenderOffscreenType = DrawToRenderOffscreenType.PAPER
+        layer_data.SpecialRenderType = SpecialRenderType.PAPER
+        layer_data.DrawToRenderMipmapType = DrawToRenderMipmapType.PAPER
+        layer_data.MoveOffsetAndExpandType = OffsetAndExpandType.PAPER
+        layer_data.FixOffsetAndExpandType = OffsetAndExpandType.PAPER
+        layer_data.RenderBoundForLayerMoveType = OffsetAndExpandType.PAPER
+        layer_data.SetRenderThumbnailInfoType = OffsetAndExpandType.PAPER
 
         layer_data.DrawColorEnable = 1
 
-        layer_data.write_to_db(clip_file.sql_database)
+        # No idea of what the actual data format is
+        layer_data.MonochromeFillInfo = binascii.unhexlify("0000003e0000000100000011004d006f006e006f006300680072006f006d006500530065007400740069006e006700000000000000000000000000000001")
+
+        layer_data.save()
 
         layer = cls(clip_file, layer_data)
 
@@ -610,6 +715,9 @@ class TextLayer(BaseLayer):
     # Text layers have no External chunk
 
     def __init__(self, clip_file, layer_data):
+
+        self.text_objects = []
+
         BaseLayer.__init__(self, clip_file, layer_data)
 
         attr_array = self._get_text_attributes_array()
@@ -618,13 +726,15 @@ class TextLayer(BaseLayer):
         #print(self.layer_name)
         for attr, stri in zip(attr_array, text_array):
             #print(f"String length : {len(stri)}")
-            parse_text_attribute(attr)
+            #parse_text_attribute(attr)
+            self.text_objects.append(Text.read(stri.decode("UTF-8"), attr))
 
         #print()
 
     @property
     def texts(self):
-        pass
+        for text in self.text_objects:
+            print(text)
 
     @property
     def text(self):
@@ -676,23 +786,38 @@ class CorrectionLayer(BaseLayer):
         self._correction = new_correction
         self._data.FilterLayerInfo = self._correction.to_bytes()
 
+    def save(self):
+
+        self._data.FilterLayerInfo = self._correction.to_bytes()
+
+        if isinstance(self._correction, Correction.GradientMap):
+            self._data.FilterLayerV132 = 1
+        else:
+            self._data.FilterLayerV132 = None
+
+        super().save()
+
     @classmethod
     def new(cls, clip_file, correction, layer_name = "Correction"):
 
         layer_data = BaseLayer._new(clip_file, layer_name)
 
-        layer_data.LayerType = LayerType.CORRECTION.value
+        layer_data.LayerType = LayerType.CORRECTION
 
-        layer_data.SpecialRenderType = SpecialRenderType.CORRECTION.value
-        layer_data.SetRenderThumbnailInfoType = RenderThumbnailType.CORRECTION.value
-        layer_data.DrawRenderThumbnailType = RenderThumbnailType.CORRECTION.value
+        layer_data.SpecialRenderType = SpecialRenderType.CORRECTION
+        layer_data.SetRenderThumbnailInfoType = RenderThumbnailType.CORRECTION
+        layer_data.DrawRenderThumbnailType = RenderThumbnailType.CORRECTION
+
+        layer_data.LayerSelect = layer_data.LayerSelect | 256
+        layer_data.LayerMasking = layer_data.LayerMasking | LayerMasking.BLOCK_APPLY_MASK | LayerMasking.MASK_ENABLED
+
+        layer_data.save()
 
         layer = cls(clip_file, layer_data)
 
         layer.correction = correction
 
         return layer
-
 
 class GradientLayer(BaseLayer):
 
@@ -705,6 +830,32 @@ class GradientLayer(BaseLayer):
 
         BaseLayer.__init__(self, clip_file, layer_data)
         self.gradient = Gradient.from_bytes(self._data.GradationFillInfo)
+
+    @classmethod
+    def new(cls, clip_file, gradient, layer_name = "Gradient"):
+
+        layer_data = BaseLayer._new(clip_file, layer_name)
+
+        layer_data.DrawToRenderOffscreenType = DrawToRenderOffscreenType.GRADIENT
+        layer_data.DrawToRenderMipmapType = DrawToRenderMipmapType.GRADIENT
+        layer_data.MoveOffsetAndExpandType = OffsetAndExpandType.GRADIENT
+        layer_data.FixOffsetAndExpandType = OffsetAndExpandType.GRADIENT
+        layer_data.RenderBoundForLayerMoveType = OffsetAndExpandType.GRADIENT
+        layer_data.SetRenderThumbnailInfoType = RenderThumbnailType.GRADIENT
+        layer_data.DrawRenderThumbnailType = RenderThumbnailType.GRADIENT
+        layer_data.GradationFillInfo = gradient.to_bytes()
+
+        layer_data.save()
+
+        return cls(
+            clip_file,
+            layer_data
+        )
+
+    def save(self):
+
+        self._data.GradationFillInfo = self.gradient.to_bytes()
+        super().save()
 
     @property
     def shape(self):
@@ -746,11 +897,11 @@ class VectorLayer(BaseLayer):
         for vector_chunk in vector_chunks.values():
             self.lines.append(
                 VectorList.read(
-                    self.clip_file.data_chunks[vector_chunk.VectorData].block_datas.data
+                    self.clip_file.data_chunks[vector_chunk.VectorData].block_data.data
                 )
             )
 
-            #self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_datas)
+            #self.lines = parse_vector(self.clip_file.data_chunks[vector_chunk.VectorData].block_data)
 
 class FrameLayer(Folder, VectorLayer):
 

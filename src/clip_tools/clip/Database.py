@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import importlib
+import os
 
 from collections import namedtuple
 
@@ -16,8 +17,6 @@ class Database:
             database = self.init_db()
 
         self.database_file = tempfile.NamedTemporaryFile("wb", delete=False)
-
-        #print("Writing temporary SQLi database to {}".format(self.database_file.name))
 
         self.database_file.write(database)
         self.database_file.close()
@@ -51,8 +50,14 @@ class Database:
         ]
 
     def init_db(self):
+        
+        sql_template_path = "/home/al3ks1s/Projets/clip-tools/tests/TEMPLATE.sqlite3"
 
-        return b''
+        f = open(sql_template_path, 'rb')
+        database = f.read()
+        f.close()
+
+        return database
 
     def _execute_query(self, query):
 
@@ -60,14 +65,23 @@ class Database:
         return self.db_cursor.fetchall()
 
     def get_free_main_id(self, table):
+
+        if table not in self.table_scheme:
+            return 1
+
         return self._execute_query(f"select max(MainId) from {table}")[0][0] + 1
 
     def get_free_pw_id(self, table):
+
+        if table not in self.table_scheme:
+            return 1
+
         free_id = self._execute_query(f"select max(_PW_ID) from {table}")[0][0]
+
         if free_id is None:
             return 1
-        else:
-            return free_id + 1
+        
+        return free_id + 1
 
     def fetch_project_data(self):
         return self._row_to_object(self._execute_query(f"Select * from Project")[0], "Project")
@@ -91,6 +105,12 @@ class Database:
             self._execute_query(f"Select * from {table} where {column}=={value}"),
             table
         )
+
+    def delete_from_db(self, table, value):
+        if table not in self.table_scheme:
+            return None # Raise an exception
+
+        return self._execute_query(f"DELETE FROM {table} where MainId = {value}")
 
     def edit_entry(self, table, value_dict):
 
@@ -153,13 +173,15 @@ class Database:
         _class = getattr(_module, table)
 
         mapped_row = data_type(*row)._asdict()
+
+        mapped_row["db"] = self
         #del mapped_row["PW_ID"]
 
         return _class(**mapped_row)
 
     @classmethod
     def new(cls):
-        pass
+        return cls()
 
     @classmethod
     def read(cls, fp):
@@ -171,7 +193,17 @@ class Database:
 
         return cls(database)
 
-    def write(self, fp):
+    def write(self, fp, ext_id_offsets):
+
+        self._execute_query("DELETE FROM ExternalChunk")
+
+        for ext_id, offset in ext_id_offsets:
+            self.db_cursor.execute(
+                "INSERT INTO ExternalChunk (ExternalID, Offset) VALUES (?, ?)",
+                (ext_id.decode("UTF-8"), offset)
+            )
+
+        self.db_conn.commit()
 
         fp.write(Database.chunk_signature)
 
@@ -188,6 +220,8 @@ class Database:
         write_fmt(fp, ">q", written)
 
         fp.seek(0, 2)
+
+        os.unlink(self.database_file.name)
 
     def _scheme_to_classes(self):
         # Cursed data class writing

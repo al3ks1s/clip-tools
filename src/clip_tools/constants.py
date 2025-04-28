@@ -1,24 +1,59 @@
 from enum import Enum, IntEnum, IntFlag, auto
 
-# -----------------
-# Param Scheme data
+# DefaultPageColorType
+# LayerColorTypeIndex
+class ColorMode(IntEnum):
+    RGB = 0
+    GRAYSCALE = 1
+    MONOCHROME = 2
 
-class DataType(IntEnum):
-    INT = 1
-    FLOAT = 2
-    STR = 3
-    BYTES = 4
+    @classmethod
+    def pil_mode(cls, color_mode):
+        return {
+            ColorMode.RGB: "RGBA",
+            ColorMode.GRAYSCALE: "LA",
+            ColorMode.MONOCHROME: "LA" # Due to csp encoding and lack of transparency support in monochrome image from pil
+        }.get(color_mode)
 
+    @classmethod
+    def from_pil(cls, pil_mode):
+        return {
+            "RGB": ColorMode.RGB,
+            "RGBA": ColorMode.RGB,
+            "L": ColorMode.GRAYSCALE,
+            "LA": ColorMode.GRAYSCALE,
+            "1": ColorMode.MONOCHROME
+        }.get(pil_mode)
 
+class CanvasChannelOrder(IntFlag):
 
-# ----------------
-# Data definitions
-
-class CanvasChannelBytes(IntFlag):
-    
     ALPHA = 1
     BW = 16
     RGB = 32
+
+    @classmethod
+    def from_color_mode(cls, color_mode):
+
+        return {
+            ColorMode.RGB: CanvasChannelOrder.ALPHA | CanvasChannelOrder.RGB,
+            ColorMode.GRAYSCALE: CanvasChannelOrder.ALPHA | CanvasChannelOrder.BW,
+            ColorMode.MONOCHROME: CanvasChannelOrder.ALPHA | CanvasChannelOrder.BW,
+        }.get(color_mode)
+
+    @classmethod
+    def from_pil_mode(cls, pil_mode):
+        return CanvasChannelOrder.ALPHA | {
+            "RGB": CanvasChannelOrder.RGB,
+            "RGBA": CanvasChannelOrder.RGB,
+            "L": CanvasChannelOrder.BW,
+            "LA": CanvasChannelOrder.BW,
+            "1": CanvasChannelOrder.ALPHA
+        }.get(pil_mode)
+
+
+class CanvasUnit(IntEnum):
+    PIXEL = 0
+
 
 class LayerType(IntFlag):
 
@@ -83,16 +118,11 @@ class BlendMode(IntEnum):
     DIVIDE = 36
 
 class LayerMasking(IntFlag):
-    # 0 No mask
-    # 1 Mask enabled
-    # 3 Mask + Show mask area
-    # 32 For folders without masks
-    # 33 For folders with mask (Folder + Mask)
     # 114, For Frame folders (MASK_AREA + UNK + Folder + Frame)
     MASK_ENABLED = 1
     MASK_AREA = 2
     UNK = 16 # Use Vector line as mask delimitation?
-    FOLDER = 32
+    BLOCK_APPLY_MASK = 32
     FRAME = 64
 
 class LayerVisibility(IntFlag):
@@ -111,7 +141,7 @@ class LayerLock(IntFlag):
 class LayerSelect(IntFlag):
     # Flag system too
     # 0
-    # 2 
+    # 2
     # 256
     # 512
     pass
@@ -284,6 +314,7 @@ class TextAlign(IntEnum):
     CENTER = 2
 
 class TextStyle(IntFlag):
+    NONE = 0
     BOLD = 1
     ITALIC = 2
     UNDERLINE = 4

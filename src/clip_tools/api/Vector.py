@@ -35,7 +35,8 @@ class VectorPoint():
 
     @corner.setter
     def corner(self, is_corner: bool):
-        pass
+        if self.corner != is_corner:
+            self.switch_corner()
 
     def switch_corner(self):
         self.point_flag = self.point_flag ^ VectorPointFlag.CORNER
@@ -46,7 +47,7 @@ class VectorPoint():
     @classmethod
     def read(cls, io_stream, vector_flag):
         pos = Position.read(io_stream)
-        point_bbox = BBox.read(">i", io_stream)
+        point_bbox = BBox.read(io_stream, ">i")
 
         point_vector_flag = VectorPointFlag(read_fmt(">i", io_stream))
 
@@ -75,11 +76,9 @@ class VectorPoint():
         bezier_points = []
 
         if vector_flag & VectorFlag.CURVE_QUADRATIC_BEZIER:
-
             bezier_points.append(Position.read(io_stream))
 
         if vector_flag & VectorFlag.CURVE_CUBIC_BEZIER:
-
             bezier_points.append(Position.read(io_stream))
             bezier_points.append(Position.read(io_stream))
 
@@ -145,7 +144,7 @@ class Vector():
         num_points = read_fmt(">i", io_stream)
 
         vector_flag = VectorFlag(read_fmt(">i", io_stream))
-        vector_bbox = BBox.read(">i", io_stream)
+        vector_bbox = BBox.read(io_stream, ">i")
 
         main_color = Color.read(io_stream)
         sub_color = Color.read(io_stream)

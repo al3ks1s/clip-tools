@@ -64,6 +64,9 @@ class Level():
         self.green.write(io_stream)
         self.blue.write(io_stream)
 
+        for _ in range(28):
+            LevelCorrection.dummy().write(io_stream)
+
         size = io_stream.tell() - 8
         io_stream.seek(offset)
         write_fmt(io_stream, ">i", size)
@@ -104,6 +107,9 @@ class ToneCurve():
         self.red.write_short(io_stream)
         self.green.write_short(io_stream)
         self.blue.write_short(io_stream)
+
+        for _ in range(28):
+            CurveList.dummy().write_short(io_stream)
 
         size = io_stream.tell() - 8
         io_stream.seek(offset)
@@ -222,8 +228,7 @@ class Posterization():
         write_fmt(io_stream, ">i", 4)
         write_fmt(io_stream, ">i", self.level)
 
-        io_stream.seek(0)
-        return io_stream.read()
+        return io_stream.getbuffer().tobytes()
 
     @classmethod
     def from_bytes(cls, correction_data):
@@ -347,8 +352,8 @@ class GradientMap():
     @classmethod
     def new(cls):
         return cls([
-            ColorStop(Color(0, 0, 0), 100, 0, 0, 0, CurveList.new()),
-            ColorStop(Color(255, 255, 255), 100, 0, 100, 0, CurveList.new())
+            ColorStop(Color(0, 0, 0), 255, 0, 0, 0, CurveList.new()),
+            ColorStop(Color(255, 255, 255), 255, 0, 100, 0, CurveList.new())
         ])
 
 

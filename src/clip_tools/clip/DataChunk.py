@@ -1,9 +1,13 @@
-from clip_tools.utils import read_fmt, write_fmt, write_bytes
+from clip_tools.utils import read_fmt, write_fmt, write_bytes, read_csp_str, write_csp_str
 from clip_tools.clip.Database import Database
 import io 
 import zlib
 import binascii
 from attrs import define
+from Cryptodome.Hash import MD5
+import random
+import time
+import struct
 
 class Block:
     begin_chunk_signature: str = 'BlockDataBeginChunk'.encode('UTF-16BE')
@@ -22,7 +26,7 @@ class Block:
         self.data = data
 
     @classmethod
-    def new(cls, index, data):
+    def new(cls, index, data = None):
 
         if data is None:
             return cls(index, False, data)
@@ -41,13 +45,15 @@ class Block:
         assert signature == Block.begin_chunk_signature
 
         block_data_index = read_fmt(">i", fp)
-
+        #print(block_data_index)
         unk = fp.read(12)
-        # Usually b'\x00\x05\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00'
+        #print(unk)
+        #  Looks like Int:NumChannel,Int:BlockWidth,Int:BlockHeight
+        #  Usually b'\x00\x05\x00\x00\x00\x00\x01\x00\x00\x00\x01\x00'
 
         data_present = read_fmt(">i", fp)
-
         if data_present:
+
             subblock_size = read_fmt(">i", fp)
             le_sublock_size = read_fmt('<i', fp)
 
@@ -98,6 +104,11 @@ class Block:
 
         return written
 
+    def tobytes(self):
+        data = io.BytesIO()
+        written = self.write(data)
+        return written
+
     def checksum(self):
 
 
@@ -124,12 +135,45 @@ class VectorChunk():
 class BlockData():
 
     blocks: list
-    block_status: list
-    block_checksums: list
+    #block_status: list
+    #block_checksums: list
+
+    def __len__(self) -> int:
+        return self.blocks.__len__()
+
+    def __iter__(self):
+        return self.blocks.__iter__()
+
+    def __getitem__(self, key):
+        return self.blocks.__getitem__(key)
+
+    def __setitem__(self, key, value) -> None:
+        self.blocks.__setitem__(key, value)
+
+    def __delitem__(self, key) -> None:
+        self.blocks.__delitem__(key)
+
+    def remove(self, block):
+        self.blocks.remove(block)
+        return self
+
+    def append(self, block) -> None:
+        self.extend([block])
+
+    def extend(self, layers) -> None:
+        self.blocks.extend(layers)
+
+    def clear(self) -> None:
+        self.blocks.clear()
+
+    def index(self, block) -> int:
+        return self.blocks.index(block)
 
     @classmethod
     def new(cls):
-        pass
+        return cls(
+            [],
+        )
 
     @classmethod
     def read(cls, fp):
@@ -137,8 +181,6 @@ class BlockData():
         blocks = []
         block_status = []
         block_checksums = []
-
-        has_next_block = True
 
         while fp.tell() < fp.getbuffer().nbytes:
 
@@ -194,13 +236,13 @@ class BlockData():
                 fp.seek(0)
                 return VectorChunk.read(fp)
 
-        return BlockData(blocks, block_status, block_checksums)
+        return BlockData(blocks) #, block_status, block_checksums)
 
     def write(self, fp):
 
         written = 0
 
-        for block in self.blocks:
+        for block in self:
             written += block.write(fp)
 
         # Writing block status (always 1)
@@ -208,10 +250,10 @@ class BlockData():
         written += write_bytes(fp, Block.status_chunk_signature)
 
         written += write_fmt(fp, ">i", 12)
-        written += write_fmt(fp, ">i", len(self.blocks))
+        written += write_fmt(fp, ">i", len(self))
         written += write_fmt(fp, ">i", 4)
 
-        for _ in range(len(self.blocks)):
+        for _ in range(len(self)):
             written += write_fmt(fp, ">i", 1)
 
         # Writing block checksums
@@ -219,31 +261,47 @@ class BlockData():
         written += write_bytes(fp, Block.checksum_chunk_signature)
 
         written += write_fmt(fp, ">i", 12)
-        written += write_fmt(fp, ">i", len(self.blocks))
+        written += write_fmt(fp, ">i", len(self))
         written += write_fmt(fp, ">i", 4)
 
-        for i in range(len(self.blocks)):
-            written += write_fmt(fp, ">I", 0) # Writing 0 for checksum, feel free to search the proper algorithm (its not classic CRC32)
+        for i in range(len(self)):
+            written += write_fmt(fp, ">I", self.blocks[i].checksum())
+            # Writing 0 for checksum, feel free to search the proper algorithm (its not classic CRC32)
 
         return written
 
 class DataChunk:
 
     chunk_signature: str = b'CHNKExta'
-    external_chunk_size: int
     external_chunk_id: str
 
     block_data: BlockData
     vector_chunk: VectorChunk
 
-    def __init__(self, external_chunk_size, external_chunk_id, block_datas):
-        self.external_chunk_size = external_chunk_size
+    def __init__(self, external_chunk_id, block_data):
         self.external_chunk_id = external_chunk_id
-        self.block_datas = block_datas
+        self.block_data = block_data
 
     @classmethod
-    def new(cls):
-        pass
+    def new_id(cls):
+        mdhasher = MD5.new()
+        mdhasher.update(struct.pack(">q", time.time_ns()))
+        mdhasher.update(random.randbytes(random.randint(30, 1000)))
+
+        hash_id = mdhasher.hexdigest()
+
+        return ("extrnlid" + hash_id.upper()).encode("UTF-8")
+
+    @classmethod
+    def new(cls, extrnlid = None):
+
+        if extrnlid is None:
+            extrnlid = cls.new_id()
+
+        return cls(
+            extrnlid,
+            BlockData.new()
+        )
 
     @classmethod
     def read(cls, fp):
@@ -252,6 +310,7 @@ class DataChunk:
 
         external_chunk_id_length = read_fmt(">q", fp)
         external_chunk_id = fp.read(external_chunk_id_length)
+        #external_chunk_id = read_csp_str(">q", fp)
 
         external_chunk_size_2 = read_fmt(">q", fp)
 
@@ -261,7 +320,7 @@ class DataChunk:
 
         block_datas = BlockData.read(block_raw)
 
-        return cls(external_chunk_size, external_chunk_id, block_datas)
+        return cls(external_chunk_id, block_datas)
 
     def write(self, fp):
 
@@ -270,13 +329,14 @@ class DataChunk:
         size_offset = fp.tell()
         written += write_fmt(fp, ">q", 0)
 
+        #written += write_csp_str(">q", fp, self.external_chunk_id)
         written += write_fmt(fp, ">q", len(self.external_chunk_id))
         written += write_bytes(fp, self.external_chunk_id)
 
         size2_offset = fp.tell()
         written += write_fmt(fp, ">q", 0)
 
-        data_written = self.block_datas.write(fp)
+        data_written = self.block_data.write(fp)
         written += data_written
 
         fp.seek(size_offset)
@@ -293,7 +353,7 @@ class DataChunks(dict):
 
     @classmethod
     def new(cls):
-        pass
+        return cls()
 
     @classmethod
     def read(cls, fp): # chunkSizes
@@ -324,6 +384,3 @@ class DataChunks(dict):
             written += self[chunk_id].write(fp)
 
         return external_id_offsets, written
-
-    def add_external_chunk(self):
-        pass

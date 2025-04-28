@@ -17,12 +17,18 @@ class ClipStudioFile:
     sql_database: Database
     footer: Footer
 
-    def __init__(self, file_size, header_offset, header, data_chunks, sql_database):
-        self.file_size = file_size
-        self.header_offset = header_offset
+    def __init__(self, header, data_chunks, sql_database):
         self.header = header
         self.data_chunks = data_chunks
         self.sql_database = sql_database
+
+    @classmethod
+    def new(cls):
+        return cls(
+            ChunkHeader.new(),
+            DataChunks.new(),
+            Database.new()
+        )
 
     @classmethod
     def read(cls, fp):
@@ -36,7 +42,7 @@ class ClipStudioFile:
         sql_database = Database.read(fp)
         footer = Footer.read(fp)
 
-        return cls(file_size, header_offset, header, data_chunks, sql_database)
+        return cls(header, data_chunks, sql_database)
 
     def write(self, fp):
 
@@ -46,8 +52,15 @@ class ClipStudioFile:
         write_fmt(fp, ">q", 24)
 
         self.header.write(fp)
-        self.data_chunks.write(fp)
-        self.sql_database.write(fp)
+        ext_id_offsets, _ = self.data_chunks.write(fp)
+
+        # Write the db address to the header
+        db_offset = fp.tell()
+        fp.seek(0x30)
+        write_fmt(fp, ">q", db_offset)
+        fp.seek(db_offset)
+
+        self.sql_database.write(fp, ext_id_offsets)
         Footer.write(fp)
 
         file_size = fp.tell()

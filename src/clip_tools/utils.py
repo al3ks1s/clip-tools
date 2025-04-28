@@ -71,10 +71,10 @@ def read_csp_str(size_fmt, f):
 def write_csp_unicode_str(size_fmt, f, string_data):
 
     str_to_write = string_data.encode('UTF-16-BE')
-    written = write_fmt(f, size_fmt, len(str_to_write))
+    written = write_fmt(f, size_fmt, len(str_to_write) // 2)
     written += write_bytes(f, str_to_write)
 
-    if written == len(str_to_write) + struct.calcsize(size_fmt):
+    if written != len(str_to_write) + struct.calcsize(size_fmt):
         raise IOError(
             "Failed to write data: written=%d, expected=%d." % (written, len(str_to_write) + struct.calcsize(size_fmt))
         )
@@ -84,10 +84,10 @@ def write_csp_unicode_str(size_fmt, f, string_data):
 def write_csp_unicode_le_str(size_fmt, f, string_data):
 
     str_to_write = string_data.encode('UTF-16-LE')
-    written = write_fmt(f, size_fmt, len(str_to_write))
+    written = write_fmt(f, size_fmt, len(str_to_write) // 2)
     written += write_bytes(f, str_to_write)
 
-    if written == len(str_to_write) + struct.calcsize(size_fmt):
+    if written != len(str_to_write) + struct.calcsize(size_fmt):
         raise IOError(
             "Failed to write data: written=%d, expected=%d." % (written, len(str_to_write) + struct.calcsize(size_fmt))
         )
@@ -100,7 +100,7 @@ def write_csp_str(size_fmt, f, string_data):
     written = write_fmt(f, size_fmt, len(str_to_write))
     written += write_bytes(f, str_to_write)
 
-    if written == len(str_to_write) + struct.calcsize(size_fmt):
+    if written != len(str_to_write) + struct.calcsize(size_fmt):
         raise IOError(
             "Failed to write data: written=%d, expected=%d." % (written, len(str_to_write) + struct.calcsize(size_fmt))
         )
@@ -125,12 +125,47 @@ def decompositor(x):
         i <<= 1
     return powers
 
+def shifter_calculator(fmt):
+    return (struct.calcsize(fmt) - 1) * 8
+
+def channel_to_pil(c_num):
+
+    return {
+        3: "RGB",
+        4: "RGBA",
+        5: "RGBA",
+
+        1: "L",
+        2: "LA"
+    }.get(c_num)
+
+def get_pil_depth(pil_mode: str) -> int:
+    """Get the depth of image for PIL modes."""
+    return {
+        "1": 1,
+        "L": 8,
+        "LA": 8,
+        "RGB": 32,
+        "RGBA": 32,
+    }.get(pil_mode)
+
+def pil_to_channel(pil_mode):
+
+    return {
+        "RGB": 4,
+        "RGBA": 4,
+
+        "L": 1,
+        "LA": 1,
+
+        "1": 1
+    }.get(pil_mode)
+
 # Attrs converters
 def validate_range(value, field):
 
     range_ = field.metadata["range"]
     return min(max(value, range_[0]), range_[1])
-
 
 def attrs_range_builder(type_, default, range_):
     return attrs.field(
@@ -138,7 +173,6 @@ def attrs_range_builder(type_, default, range_):
         default=default,
         metadata={"range": range_},
         converter=[
-            type_,
             attrs.Converter(
                 validate_range,
                 takes_field=True

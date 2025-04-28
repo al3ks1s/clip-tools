@@ -1,19 +1,245 @@
 import io
 import zlib
-
-from PIL import Image
-from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, decompositor
-
-from clip_tools.constants import GradientRepeatMode, GradientShape, ScreenToneShape, ExtractLinesDirection, TextAttribute, TextAlign, TextStyle, TextOutline, TextWrapDirection, VectorFlag, VectorPointFlag
-from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, TextRun, TextParam, BBox, RulerCurvePoint, ReadingSetting, TextBackground, TextEdge
-
+from isal import isal_zlib
+import concurrent.futures
+from PIL import Image, ImageChops
+from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, decompositor, channel_to_pil
+from clip_tools.clip.DataChunk import DataChunk, BlockData, Block
+from clip_tools.constants import TextAttribute, TextAlign, TextStyle, TextOutline, TextWrapDirection, VectorFlag, VectorPointFlag
+from clip_tools.data_classes import Position, Color, TextRun, TextParam, BBox, ReadingSetting, TextBackground, TextEdge, OffscreenAttribute, PixelPackingAttribute, ColorMode
+from Cryptodome.Hash import MD5
 from collections import namedtuple
 
 import logging
-import binascii
 
 logger = logging.getLogger(__name__)
 
+def decode_chunk_to_pil(chunk, offscreen_attribute):
+
+    pix_packing = offscreen_attribute.packing_attributes
+
+    total_channel_count = pix_packing.buffer_channel_count + pix_packing.alpha_channel_count
+
+    im = Image.new(
+        channel_to_pil(total_channel_count),
+        (offscreen_attribute.bitmap_width, offscreen_attribute.bitmap_height),
+        255*offscreen_attribute.default_fill_color
+    )
+
+    block_area = pix_packing.block_width * pix_packing.block_height
+
+    for h in range(offscreen_attribute.block_grid_height):
+        for w in range(offscreen_attribute.block_grid_width):
+            block = chunk.block_data[h * offscreen_attribute.block_grid_width + w]
+            block_res = b''
+
+            if block.data_present:
+
+                pix_bytes = zlib.decompress(block.data)
+
+                final_channels = []
+
+                if pix_packing.buffer_channel_count != 0:
+
+                    buffer_block_byte_count = block_area // (8 // (pix_packing.buffer_bit_depth // pix_packing.buffer_channel_count))
+
+                    if pix_packing.monochrome:
+                        block_buffer = Image.frombuffer(
+                            "1", 
+                            (pix_packing.block_width, pix_packing.block_height),
+                            pix_bytes[
+                                buffer_block_byte_count * pix_packing.alpha_channel_count:
+                                buffer_block_byte_count *(pix_packing.buffer_channel_count + pix_packing.alpha_channel_count)
+                            ]
+                        )
+
+                        block_buffer = block_buffer.convert(channel_to_pil(pix_packing.buffer_channel_count))
+
+                    else:
+                        block_buffer = Image.frombuffer(
+                            channel_to_pil(pix_packing.buffer_channel_count),
+                            (pix_packing.block_width, pix_packing.block_height),
+                            pix_bytes[
+                                buffer_block_byte_count * pix_packing.alpha_channel_count:
+                                buffer_block_byte_count*(pix_packing.buffer_channel_count + pix_packing.alpha_channel_count)
+                            ]
+                        )
+
+                    buffer_channels = block_buffer.split()
+                    block_buffer = buffer_channels[:3][::-1]
+
+                    final_channels.extend(block_buffer)
+
+                if pix_packing.alpha_channel_count != 0:
+
+                    alpha_byte_count = block_area // (8 // pix_packing.alpha_bit_depth)
+
+                    if pix_packing.monochrome:
+                        block_alpha = Image.frombuffer(
+                            "1", 
+                            (pix_packing.block_width, pix_packing.block_height),
+                            pix_bytes[:alpha_byte_count * pix_packing.alpha_channel_count]
+                        )
+
+                        block_alpha = block_alpha.convert(channel_to_pil(pix_packing.alpha_channel_count))
+                    else:
+
+                        block_alpha = Image.frombuffer(
+                            channel_to_pil(pix_packing.alpha_channel_count),
+                            (pix_packing.block_width, pix_packing.block_height),
+                            pix_bytes[:alpha_byte_count * pix_packing.alpha_channel_count]
+                        )
+
+                    final_channels.extend(block_alpha.split())
+
+                if len(final_channels) == 0:
+                    raise ValueError("No channels to merge in chunk decoding")
+
+                block_res = Image.merge(channel_to_pil(total_channel_count), final_channels)
+
+                im.paste(block_res, (256*w,256*h))
+
+    return im
+
+def encode_pil_to_chunk(pil_im):
+
+    chunk_data = DataChunk.new()
+
+    width = pil_im.width
+    height = pil_im.height
+    color_mode = ColorMode.from_pil(pil_im.mode)
+
+    offscreen_attribute = OffscreenAttribute.new(width, height, color_mode)
+    packing_attributes = offscreen_attribute.packing_attributes
+
+    for h in range(offscreen_attribute.block_grid_height):
+        for w in range(offscreen_attribute.block_grid_width):
+
+            image_data = io.BytesIO()
+
+            block_image = pil_im.crop((
+                w * packing_attributes.block_width,
+                h * packing_attributes.block_height,
+                (w+1) * packing_attributes.block_width,
+                (h+1) * packing_attributes.block_height
+            ))
+
+            if block_image.getbbox(alpha_only=False) is None and "A" in block_image.getbands():
+                chunk_data.block_data.append(
+                    Block.new(h * offscreen_attribute.block_grid_width + w, None)
+                )
+                continue
+
+            if "A" in block_image.getbands():
+                alpha_channel = block_image.getchannel("A")
+                image_data.write(alpha_channel.tobytes('raw'))
+            else:
+                mock_alpha = Image.new(
+                    "L",
+                    (packing_attributes.block_width, packing_attributes.block_height),
+                    255
+                )
+                image_data.write(mock_alpha.tobytes('raw'))
+
+            color_bands = tuple(band for band in block_image.getbands() if band != 'A')
+
+            color_channels = Image.merge(
+                block_image.mode.rstrip("A"),
+                [block_image.getchannel(band) for band in color_bands][::-1]
+            )
+
+            if color_channels.mode == "RGB":
+                color_channels.putalpha(0) # Padding
+
+            image_data.write(color_channels.tobytes('raw'))
+
+            compressed_blk = zlib.compress(image_data.getbuffer().tobytes(), level=1)
+
+            chunk_data.block_data.append(Block.new(
+                h * offscreen_attribute.block_grid_width + w,
+                compressed_blk
+            ))
+
+            offscreen_attribute.block_sizes[h * offscreen_attribute.block_grid_width + w] = (112 + len(compressed_blk))
+
+    return chunk_data, offscreen_attribute
+
+
+
+# Not sure these two are relevant to keep
+def encoder_worker(img_part_tuple):
+
+    img_part = img_part_tuple[0]
+    offscreen_attribute = img_part_tuple[1]
+    w = img_part_tuple[2]
+    h = img_part_tuple[3]
+
+    packing_attributes = offscreen_attribute.packing_attributes
+
+    image_data = io.BytesIO()
+
+    if img_part.getbbox(alpha_only=False) is None and "A" in img_part.getbands():
+        return Block.new(h * offscreen_attribute.block_grid_width + w, None)
+
+    if "A" in img_part.getbands():
+        alpha_channel = img_part.getchannel("A")
+        image_data.write(alpha_channel.tobytes('raw'))
+    else:
+        mock_alpha = Image.new(
+            "L",
+            (packing_attributes.block_width, packing_attributes.block_height),
+            255
+        )
+        image_data.write(mock_alpha.tobytes('raw'))
+
+    color_bands = tuple(band for band in img_part.getbands() if band != 'A')
+
+    color_channels = Image.merge(
+        img_part.mode.rstrip("A"),
+        [img_part.getchannel(band) for band in color_bands][::-1]
+    )
+
+    if color_channels.mode == "RGB":
+        color_channels.putalpha(0) # Padding
+
+    image_data.write(color_channels.tobytes('raw'))
+
+    return Block.new(
+        h * offscreen_attribute.block_grid_width + w,
+        zlib.compress(image_data.getbuffer(), level=1)
+    )
+
+def encode_pil_to_chunk_parallels(pil_im):
+
+    chunk_data = DataChunk.new()
+
+    offscreen_attribute = OffscreenAttribute.new(pil_im)
+    packing_attributes = offscreen_attribute.packing_attributes
+
+    img_parts = []
+
+    for h in range(offscreen_attribute.block_grid_height):
+        for w in range(offscreen_attribute.block_grid_width):
+
+            block_image = pil_im.crop((
+                w * packing_attributes.block_width,
+                h * packing_attributes.block_height,
+                (w+1) * packing_attributes.block_width,
+                (h+1) * packing_attributes.block_height
+            ))
+
+            img_parts.append((block_image, offscreen_attribute, w, h))
+
+            #chunk_data.block_data.append(encoder_worker(block_image, offscreen_attribute, w, h))
+
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for block in executor.map(encoder_worker, img_parts):
+            chunk_data.block_data.append(block)
+
+    return chunk_data, offscreen_attribute
+
+
+# Deprecated
 def parse_offscreen_attribute(offscreen_attribute):
 
     columns = ["header_size", "info_section_size", "extra_info_section_size", "u1", "bitmap_width", "bitmap_height", "block_grid_width", "block_grid_height", "pixel_packing_attributes", "u2", "default_fill_color", "u3", "other_init_color_count", "u5", "u6", "block_count", "u7", "block_sizes"]
@@ -25,11 +251,9 @@ def parse_offscreen_attribute(offscreen_attribute):
     offscreen_io = io.BytesIO(offscreen_attribute)
 
     header_size = read_fmt(">i", offscreen_io)
-    info_section_size = read_fmt(">i", offscreen_io)
-
-    extra_info_section_size = read_fmt(">i", offscreen_io)
-
-    u1 = read_fmt(">i", offscreen_io)
+    parameter_section_size = read_fmt(">i", offscreen_io)
+    init_color_section_size = read_fmt(">i", offscreen_io)
+    block_size_section_size = read_fmt(">i", offscreen_io)
 
     parameter_size = read_fmt(">i", offscreen_io)
     assert offscreen_io.read(parameter_size * 2) == parameter_str
@@ -45,154 +269,59 @@ def parse_offscreen_attribute(offscreen_attribute):
     assert offscreen_io.read(initcolor_size * 2) == initcolor_str
 
     u2 = read_fmt(">i", offscreen_io)
+    assert u2 == 20
+
     default_fill_color = read_fmt(">i", offscreen_io)
     u3 = read_fmt(">i", offscreen_io)
+    assert u3 == -1
+
     other_init_colors_count = read_fmt(">i", offscreen_io) # ?
     u5 = read_fmt(">i", offscreen_io)
+    assert u5 == 4
 
     other_init_colors = []
     for _ in range(other_init_colors_count):
         other_init_colors.append(read_fmt(">i", offscreen_io))
-    
+        print(other_init_colors)
+
     blocksize_size = read_fmt(">i", offscreen_io)
     assert offscreen_io.read(blocksize_size * 2) == blocksize_str
 
     u6 = read_fmt(">i", offscreen_io)
+    assert u6 == 12
+
     block_count = read_fmt(">i", offscreen_io)
     u7 = read_fmt(">i", offscreen_io)
+    assert u7 == 4
 
     blocks_sizes = [read_fmt(">i", offscreen_io) for _i in range(block_count)]
-    
-    values = [header_size, info_section_size, extra_info_section_size, u1, bitmap_width, bitmap_height, block_grid_width, block_grid_height, pixel_packing_attributes, u2, default_fill_color, u3, other_init_colors_count, u5, u6, block_count, u7, blocks_sizes]
-    
+
+    values = [
+        header_size,
+        parameter_section_size,
+        init_color_section_size,
+        block_size_section_size,
+
+        bitmap_width,
+        bitmap_height,
+        block_grid_width,
+        block_grid_height,
+
+        pixel_packing_attributes,
+        u2,
+        default_fill_color,
+        u3,
+        other_init_colors_count,
+        u5,
+        u6,
+        block_count,
+        u7,
+        blocks_sizes
+        ]
+
     return namedtuple("mipAttributes", columns)(*values)
 
-def decode_chunk_to_pil(chunk, offscreen_attributes):
-
-    def channel_to_pil(c_num):
-
-        c_d = {
-            3: "RGB",
-            4: "RGBA",
-            5: "RGBA",
-
-            1: "L",
-            2: "LA"
-        }
-
-        return c_d.get(c_num)
-
-    bit_depth = offscreen_attributes.pixel_packing_attributes[0] # See CanvasChannelBytes
-
-    alpha_channel_count = offscreen_attributes.pixel_packing_attributes[1] # Alpha channel count
-    buffer_channel_count = offscreen_attributes.pixel_packing_attributes[2] # Image buffer channel count
-    total_channel_count = offscreen_attributes.pixel_packing_attributes[3] # Total channel count
-
-    buffer_block_byte_count = offscreen_attributes.pixel_packing_attributes[4]# Buffer block byte count dependant on bit depth (eg : 1-bit will be 8192)
-
-    buffer_channel_count2 = offscreen_attributes.pixel_packing_attributes[5]
-    buffer_bit_depth = offscreen_attributes.pixel_packing_attributes[6] // 32 # Buffer bit depth (Per buffer block, need to divide by the number of channel) 
-
-    alpha_channel_count2 = offscreen_attributes.pixel_packing_attributes[7]
-    alpha_bit_depth = offscreen_attributes.pixel_packing_attributes[8] // 32
-
-    buffer_block_area = offscreen_attributes.pixel_packing_attributes[9]
-
-    block_width = offscreen_attributes.pixel_packing_attributes[10]
-    block_height = offscreen_attributes.pixel_packing_attributes[11]
-
-    unk1 = offscreen_attributes.pixel_packing_attributes[12] # Always 8
-    unk1 = offscreen_attributes.pixel_packing_attributes[13] # Always 8
-
-    monochrome = bool(offscreen_attributes.pixel_packing_attributes[14]) # Only changed to 1 when the layer was mono
-    
-    unk1 = offscreen_attributes.pixel_packing_attributes[15] # Always 0
-
-    total_channel_count = buffer_channel_count + alpha_channel_count
-
-    im = Image.new(
-        channel_to_pil(total_channel_count),
-        (offscreen_attributes.bitmap_width, offscreen_attributes.bitmap_height),
-        255*offscreen_attributes.default_fill_color
-    )
-
-    block_area = block_width * block_height
-
-    for h in range(offscreen_attributes.block_grid_height):
-        for w in range(offscreen_attributes.block_grid_width):
-            block = chunk.block_datas[h * offscreen_attributes.block_grid_width + w]
-
-            block_res = b''
-
-            if block.data_present:
-
-                pix_bytes = zlib.decompress(block.data)
-
-                final_channels = []
-
-                if buffer_channel_count != 0:
-
-                    buffer_block_byte_count = block_area // (8 // (buffer_bit_depth // buffer_channel_count))
-
-                    if monochrome:
-                        block_buffer = Image.frombuffer(
-                            "1", 
-                            (block_width, block_height),
-                            pix_bytes[
-                                buffer_block_byte_count * alpha_channel_count:
-                                buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)
-                            ]
-                        )
-
-                        block_buffer = block_buffer.convert(channel_to_pil(buffer_channel_count))
-
-                    else:
-                        block_buffer = Image.frombuffer(
-                            channel_to_pil(buffer_channel_count),
-                            (block_width, block_height),
-                            pix_bytes[
-                                buffer_block_byte_count * alpha_channel_count:
-                                buffer_block_byte_count*(buffer_channel_count + alpha_channel_count)
-                            ]
-                        )
-
-                    buffer_channels = block_buffer.split()
-                    block_buffer = buffer_channels[:3][::-1]
-
-                    final_channels.extend(block_buffer)
-
-                if alpha_channel_count != 0:
-
-                    alpha_byte_count = block_area // (8 // alpha_bit_depth)
-
-                    if monochrome:
-                        block_alpha = Image.frombuffer(
-                            "1", 
-                            (block_width, block_height), 
-                            pix_bytes[:alpha_byte_count * alpha_channel_count]
-                        )
-
-                        block_alpha = block_alpha.convert(channel_to_pil(alpha_channel_count))
-                    else:
-
-                        block_alpha = Image.frombuffer(
-                            channel_to_pil(alpha_channel_count),
-                            (block_width, block_height),
-                            pix_bytes[:alpha_byte_count * alpha_channel_count]
-                        )
-
-                    final_channels.extend(block_alpha.split())
-
-                if len(final_channels) == 0:
-                    raise ValueError("No channels to merge in chunk decoding")
-
-                block_res = Image.merge(channel_to_pil(total_channel_count), final_channels)
-
-                im.paste(block_res, (256*w,256*h))
-
-    return im
-
-
+# Deprecated
 def parse_text_attribute(text_layer_attribute_array):
 
     text_attributes = io.BytesIO(text_layer_attribute_array)
@@ -219,11 +348,7 @@ def parse_text_attribute(text_layer_attribute_array):
                 style_flag = read_fmt("<b", text_attributes)
                 default_style_flag = read_fmt("<b", text_attributes)
 
-                color = Color(
-                    read_fmt("<H", text_attributes) // 65535,
-                    read_fmt("<H", text_attributes) // 65535,
-                    read_fmt("<H", text_attributes) // 65535
-                )
+                color = Color.read(text_attributes, "<H")
 
                 font_scale = read_fmt("<d", text_attributes)
 
@@ -384,15 +509,13 @@ def parse_text_attribute(text_layer_attribute_array):
 
         elif param_id == TextAttribute.GLOBAL_COLOR:
 
-            color = Color(read_fmt("<I", text_attributes) >> 24,
-                            read_fmt("<I", text_attributes) >> 24,
-                            read_fmt("<I", text_attributes) >> 24)
+            color = Color.read(text_attributes, "<I")
 
             #print(color)
             text_params[TextAttribute(param_id)] = color
 
         elif param_id == TextAttribute.BBOX:
-            bbox = BBox.read("<I", text_attributes)
+            bbox = BBox.read(text_attributes, "<I")
             #print(bbox)
             text_params[TextAttribute(param_id)] = bbox
 
@@ -530,16 +653,17 @@ def parse_text_attribute(text_layer_attribute_array):
             text_params[TextAttribute(param_id)] = params
 
         elif param_id == 39:
+            # Info doesn't seem valuable, need to see if it can be safely removed
             # Tuple usually defining the text length, either on the first or second index
             unk_pair = (read_fmt("<i", text_attributes), read_fmt("<i", text_attributes))
             #print(unk_pair)
         elif param_id == 44:
-            # No idea, consistently 8333
+            # No idea, consistently 8333, ignore if no valuable info
             value = read_fmt("<i", text_attributes)
             assert value == 8333
             #print(decompositor(value))
         elif param_id == 43:
-            # Consistently 50
+            # Consistently 50, Ignore in newly made layers if useless
             value = read_fmt("<i", text_attributes)
             assert value == 50
             #print(value)
@@ -554,18 +678,22 @@ def parse_text_attribute(text_layer_attribute_array):
         elif param_id == 49:
             # 100
             value = read_fmt("<i", text_attributes)
+            assert value == 1000
             #print(param_id, value)
         elif param_id == 51:
             # 0
             value = read_fmt("<i", text_attributes)
+            assert value == 0
             #print(param_id, value)
         elif param_id == 61:
             # 0
             value = read_fmt("<i", text_attributes)
+            assert value == 0
             #print(param_id, value)
         elif param_id == 62:
             # 0
             value = read_fmt("<i", text_attributes)
+            assert value == 0
             #print(param_id, value)
         elif param_id == 17:
             # Mixed font data?
@@ -590,36 +718,16 @@ def parse_text_attribute(text_layer_attribute_array):
 
                 params.append((start, length, unk1, unk2, unk3, unk4, stri))
 
-            #print(params)
+            print(params)
 
         else:
 
             value = text_attributes.read(param_size)
-            logger.warning(f"Unknown text param: {param_id} {param_size} {value}")
+            logger.debug(f"Unknown text param: {param_id} {param_size} {value}")
 
     return text_params
 
-# For rulers
-def parse_point_data(point_data):
-    points_bytes = io.BytesIO(point_data)
-
-    points = []
-
-    header_size = read_fmt(">i", points_bytes)
-    point_count = read_fmt(">i", points_bytes)
-    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
-    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
-    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
-    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
-
-    for _ in range(point_count):
-        pos = Position.read(points_bytes)
-        thickness = read_fmt(">i", points_bytes)
-
-        points.append(RulerCurvePoint(pos, thickness))
-
-    return points
-
+# Deprecated
 def parse_vector(vector_blob):
 
     vector_data = io.BytesIO(vector_blob)
@@ -651,7 +759,7 @@ def parse_vector(vector_blob):
 
         flags.append(" ".join(decompositor(vector_flag)))
 
-        vector_bbox = BBox.read(">i", vector_data)
+        vector_bbox = BBox.read(vector_data, ">i")
 
         main_color = Color.read(vector_data)
         sub_color = Color.read(vector_data)
@@ -680,7 +788,7 @@ def parse_vector(vector_blob):
         for _ in range(num_points):
 
             pos = Position.read(vector_data)
-            point_bbox = BBox.read(">i", vector_data)
+            point_bbox = BBox.read(vector_data, ">i")
 
             point_vector_flag = VectorPointFlag(read_fmt(">i", vector_data))
 

@@ -1,11 +1,12 @@
 import attr
 from attr import field
-
-from enum import IntEnum, IntFlag
+from clip_tools.clip.Database import Database
+from enum import IntEnum, IntFlag, ReprEnum
 
 @attr.define
 class ClipData():
 
+    db: Database
     PW_ID: int = None
 
     # For API defined objects
@@ -18,14 +19,14 @@ class ClipData():
 
         if "MainId" in dir(cls):
             MainId = db.get_free_main_id(cls.__name__)
-            obj = cls(PW_ID, MainId, **kwarg)
+            obj = cls(db, PW_ID, MainId, **kwarg)
         else:
-            obj = cls(PW_ID, **kwarg)
+            obj = cls(db, PW_ID, **kwarg)
 
-        obj.write_to_db(db)
+        obj.save()
         return obj
 
-    def write_to_db(self, db):
+    def save(self):
 
         data_types = {
             int: "INTEGER",
@@ -36,29 +37,42 @@ class ClipData():
 
         class_name = self.__class__.__name__
 
-        if class_name not in db.table_scheme:
-            db.create_table(class_name)
+        if class_name not in self.db.table_scheme:
+            self.db.create_table(class_name)
 
-        table_scheme = db.table_scheme[class_name]
+        table_scheme = self.db.table_scheme[class_name]
 
         new_columns = [
             f"{attribute} {data_types[type(getattr(self, attribute))]}"
             for attribute in self.__slots__
-            if getattr(self, attribute) is not None and attribute not in table_scheme
+            if getattr(self, attribute) is not None and
+                attribute not in table_scheme and
+                attribute != "db" and
+                not isinstance(getattr(self, attribute), ReprEnum)
         ]
 
+        # To accomodate enums
+        new_columns.extend([
+            f"{attribute} {data_types[type(getattr(self, attribute).value)]}"
+            for attribute in self.__slots__
+            if getattr(self, attribute) is not None and 
+                attribute not in table_scheme and 
+                attribute != "db"and
+                isinstance(getattr(self, attribute), ReprEnum)
+        ])
+
         if len(new_columns) != 0:
-            db.alter_table(class_name, new_columns)
-            table_scheme = db.table_scheme[class_name]
+            self.db.alter_table(class_name, new_columns)
+            table_scheme = self.db.table_scheme[class_name]
 
         data_to_add = {attribute:attr.asdict(self)[attribute] for attribute in table_scheme}
 
-        ids = [x[0] for x in db._execute_query(f"Select _PW_ID from {class_name}")]
+        ids = [x[0] for x in self.db._execute_query(f"Select _PW_ID from {class_name}")]
 
         if self.PW_ID not in ids:
-            self.PW_ID = db.insert_new_entry(class_name, data_to_add)
+            self.PW_ID = self.db.insert_new_entry(class_name, data_to_add)
         else:
-            db.edit_entry(class_name, data_to_add)
+            self.db.edit_entry(class_name, data_to_add)
 
 
 @attr.define
@@ -115,7 +129,7 @@ class VOffscreen(ClipData):
 @attr.define
 class MipmapInfo(ClipData):
     # Class with 5 attributes
-    MainId: int = None 
+    MainId: int = None
     CanvasId: int = None
     LayerId: int = None
     ThisScale: float = None

@@ -159,8 +159,8 @@ class EffectLine(Effect):
 
     posterize_enabled = field(validator=instance_of(bool), default=False)
 
-    line_width = attrs_range_builder(int, 1, [0, 5]) 
-    effect_threshold = attrs_range_builder(int, 0, [0, 255]) 
+    line_width = attrs_range_builder(int, 1, [0, 5])
+    effect_threshold = attrs_range_builder(int, 0, [0, 255])
 
     directions = field(validator=instance_of(ExtractLinesDirection),
                         default=ExtractLinesDirection.BOTTOM |

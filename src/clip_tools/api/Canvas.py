@@ -1,44 +1,75 @@
-from clip_tools.api.Layer import BaseLayer, FolderMixin
-
+from clip_tools.api.Layer import BaseLayer, FolderMixin, PaperLayer
+from clip_tools.constants import ColorMode
+from clip_tools.data_classes import Color
 
 class Canvas():
 
     def __init__(self, clip_file, canvas_data):
         self.clip_file = clip_file
-        self.canvas_data = canvas_data
+        self._data = canvas_data
         self.root_folder = None
 
         self._init_structure()
 
+    def add_paper(self, color = Color(255,255,255)):
+
+        if len(self.root_folder) == 0:
+            self.root_folder.append(PaperLayer.new(
+                clip_file=self.clip_file,
+                color=color
+            ))
+            return
+
+        if not isinstance(self.root_folder[0], PaperLayer):
+            self.root_folder.insert(0, PaperLayer.new(
+                clip_file=self.clip_file,
+                color=color
+            ))
+            return
+
+        print("A paper layer already exists")
+
     @property
     def height(self):
-        return self.canvas_data.CanvasHeight
+        return self._data.CanvasHeight
 
     @height.setter
     def height(self, new_height):
-        self.canvas_data.CanvasHeight = new_height
+        self._data.CanvasHeight = new_height
 
     @property
     def width(self):
-        return self.canvas_data.CanvasWidth
+        return self._data.CanvasWidth
 
     @width.setter
     def width(self, new_width):
-        self.canvas_data.CanvasWidth = new_width
+        self._data.CanvasWidth = new_width
 
     @property
     def resolution(self):
-        return self.canvas_data.CanvasResolution
+        return self._data.CanvasResolution
 
     @resolution.setter
     def resolution(self, new_resolution):
-        self.canvas_data.CanvasResolution = new_resolution
+        self._data.CanvasResolution = new_resolution
+
+    @property
+    def color_mode(self):
+        return ColorMode(self._data.CanvasDefaultColorTypeIndex)
+
+    def save(self):
+        self._data.save()
+
+        self.root_folder.save()
+
+        for layer in self.root_folder:
+            layer.save()
 
     def _init_structure(self):
         
         layers = self.clip_file.sql_database.get_table("Layer")
 
-        root_data = layers[self.canvas_data.CanvasRootFolder]
+        root_data = layers[self._data.CanvasRootFolder]
         self.root_folder = BaseLayer.from_db(self.clip_file, root_data)
 
         self._recurse_structure(self.clip_file, layers, self.root_folder)
@@ -60,6 +91,8 @@ class Canvas():
             self._recurse_structure(clip_file, layers, next_layer)
 
     def __repr__(self):
-        return "Canvas(size=%dx%d, dpi=%s)" % (int(self.width),
+        return "Canvas(size=%dx%d, dpi=%s, color_mode=%s)" % (int(self.width),
             int(self.height),
-            int(self.resolution))
+            int(self.resolution),
+            self.color_mode.name
+            )

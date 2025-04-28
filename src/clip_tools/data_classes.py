@@ -1,8 +1,8 @@
 from collections import namedtuple
 from attrs import define, Factory, field
-
-from clip_tools.constants import GradientRepeatMode, GradientShape, TextAlign, TextStyle, TextOutline, VectorFlag, VectorPointFlag
-from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, attrs_range_builder, write_fmt, write_bytes, write_csp_str
+import io
+from clip_tools.constants import GradientRepeatMode, GradientShape, TextAlign, TextStyle, TextOutline, VectorFlag, VectorPointFlag, CanvasChannelOrder, ColorMode
+from clip_tools.utils import read_fmt, read_csp_unicode_str, read_csp_str, read_csp_unicode_le_str, attrs_range_builder, write_fmt, write_bytes, write_csp_str, shifter_calculator, pil_to_channel, get_pil_depth, write_csp_unicode_str
 # TODO Write Methods that return bytes format
 
 @define
@@ -49,18 +49,35 @@ class Color():
     g: int = attrs_range_builder(int, 0, [0, 255])
     b: int = attrs_range_builder(int, 0, [0, 255])
 
-    def write(self, io_stream):
-        write_fmt(io_stream, ">I", self.r << 24)
-        write_fmt(io_stream, ">I", self.g << 24)
-        write_fmt(io_stream, ">I", self.b << 24)
+    def write(self, io_stream, fmt = ">I"):
+        write_fmt(io_stream, fmt, self.r << shifter_calculator(fmt))
+        write_fmt(io_stream, fmt, self.g << shifter_calculator(fmt))
+        write_fmt(io_stream, fmt, self.b << shifter_calculator(fmt))
 
     @classmethod
-    def read(cls, io_stream):
+    def read(cls, io_stream, fmt = ">I"):
         return cls(
-            read_fmt(">I", io_stream) >> 24,
-            read_fmt(">I", io_stream) >> 24,
-            read_fmt(">I", io_stream) >> 24
+            read_fmt(fmt, io_stream) >> shifter_calculator(fmt),
+            read_fmt(fmt, io_stream) >> shifter_calculator(fmt),
+            read_fmt(fmt, io_stream) >> shifter_calculator(fmt)
         )
+
+    @classmethod
+    def WHITE(cls):
+        return cls(255, 255, 255)
+
+    @classmethod
+    def RED(cls):
+        return cls(255, 0, 0)
+
+    @classmethod
+    def GREEN(cls):
+        return cls(0, 255, 0)
+
+    @classmethod
+    def BLUE(cls):
+        return cls(0, 0, 255)
+
 
 @define
 class CurvePoint:
@@ -143,6 +160,9 @@ class CurveList():
         cl.add_point(CurvePoint(255,255))
         return cl
 
+    @classmethod
+    def dummy(cls):
+        return cls.new()
 
 @define
 class ColorStop():
@@ -152,6 +172,10 @@ class ColorStop():
     position: int
     num_curve_points: int
     curve_points: CurveList
+
+    @classmethod
+    def new(cls):
+        pass
 
 @define
 class LevelCorrection:
@@ -181,6 +205,9 @@ class LevelCorrection:
             read_fmt(">H", io_stream) >> 8
         )
 
+    @classmethod
+    def dummy(cls):
+        return LevelCorrection()
 
 @define
 class Balance():
@@ -303,4 +330,278 @@ class ReadingSetting():
             space_between,
             reading_space_free,
             reading_font
+        )
+
+@define
+class PixelPackingAttribute():
+
+    bit_order: CanvasChannelOrder
+
+    alpha_channel_count: int
+    buffer_channel_count: int
+    total_channel_count: int
+
+    buffer_block_byte_count: int
+    buffer_channel_count2: int
+    buffer_bit_depth: int
+
+    alpha_channel_count2: int
+    alpha_bit_depth: int
+
+    buffer_block_area: int
+
+    block_width: int
+    block_height: int
+
+    unk1: int
+    unk2: int
+
+    monochrome: bool
+
+    unk3: int
+
+    def write(self, io_stream):
+        write_fmt(io_stream, ">i", self.bit_order)
+
+        write_fmt(io_stream, ">i", self.alpha_channel_count)
+        write_fmt(io_stream, ">i", self.buffer_channel_count)
+        write_fmt(io_stream, ">i", self.total_channel_count)
+
+        write_fmt(io_stream, ">i", self.buffer_block_byte_count)
+        write_fmt(io_stream, ">i", self.buffer_channel_count2)
+        write_fmt(io_stream, ">i", self.buffer_bit_depth << 5)
+
+        write_fmt(io_stream, ">i", self.alpha_channel_count2)
+        write_fmt(io_stream, ">i", self.alpha_bit_depth << 5)
+
+        write_fmt(io_stream, ">i", self.buffer_block_area)
+
+        write_fmt(io_stream, ">i", self.block_width)
+        write_fmt(io_stream, ">i", self.block_height)
+
+
+        write_fmt(io_stream, ">i", self.unk1)
+        write_fmt(io_stream, ">i", self.unk2)
+        
+        write_fmt(io_stream, ">i", int(self.monochrome))
+
+        write_fmt(io_stream, ">i", self.unk3)
+
+    @classmethod
+    def read(cls, io_stream):
+        
+        bit_order = CanvasChannelOrder(read_fmt(">i", io_stream))
+
+        alpha_channel_count = read_fmt(">i", io_stream)
+        buffer_channel_count = read_fmt(">i", io_stream)
+        total_channel_count = read_fmt(">i", io_stream)
+
+        buffer_block_byte_count = read_fmt(">i", io_stream)
+        buffer_channel_count2 = read_fmt(">i", io_stream)
+        buffer_bit_depth = read_fmt(">i", io_stream) >> 5
+
+        alpha_channel_count2 = read_fmt(">i", io_stream)
+        alpha_bit_depth = read_fmt(">i", io_stream) >> 5
+
+        buffer_block_area = read_fmt(">i", io_stream)
+
+        block_width = read_fmt(">i", io_stream)
+        block_height = read_fmt(">i", io_stream)
+
+        unk1 = read_fmt(">i", io_stream)
+        unk2 = read_fmt(">i", io_stream)
+
+        monochrome = bool(read_fmt(">i", io_stream))
+
+        unk3 = read_fmt(">i", io_stream)
+
+        return cls(
+            bit_order,
+            alpha_channel_count,
+            buffer_channel_count,
+            total_channel_count,
+            buffer_block_byte_count,
+            buffer_channel_count2,
+            buffer_bit_depth,
+            alpha_channel_count2,
+            alpha_bit_depth,
+            buffer_block_area,
+            block_width,
+            block_height,
+            unk1,
+            unk2,
+            monochrome,
+            unk3
+        )
+
+    @classmethod
+    def new(cls, color_mode):
+
+        pil_mode = ColorMode.pil_mode(color_mode)
+
+        return cls(
+            bit_order = CanvasChannelOrder.from_pil_mode(pil_mode),
+            alpha_channel_count = 1,
+            buffer_channel_count = pil_to_channel(pil_mode),
+            total_channel_count = pil_to_channel(pil_mode) + 1,
+            buffer_block_byte_count = (256*256) // (8 // (get_pil_depth(pil_mode) // pil_to_channel(pil_mode))),
+            buffer_channel_count2 = pil_to_channel(pil_mode),
+            buffer_bit_depth = get_pil_depth(pil_mode),
+            alpha_channel_count2 = 1,
+            alpha_bit_depth = min(get_pil_depth(pil_mode), 8),
+            buffer_block_area = 256 * 256,
+            block_width = 256,
+            block_height = 256,
+            unk1 = 8,
+            unk2 = 8,
+            monochrome = color_mode == ColorMode.MONOCHROME,
+            unk3 = 0
+        )
+
+@define
+class OffscreenAttribute():
+
+    bitmap_width: int
+    bitmap_height: int
+
+    block_grid_width: int
+    block_grid_height: int
+
+    packing_attributes: PixelPackingAttribute
+
+    default_fill_color: int
+    other_init_colors: []
+
+    block_sizes: []
+
+    def write(self, io_stream):
+
+        write_fmt(io_stream, ">i", 0)
+        write_fmt(io_stream, ">i", 0)
+        write_fmt(io_stream, ">i", 0)
+        write_fmt(io_stream, ">i", 0)
+
+        param_offset = io_stream.tell()
+
+        write_csp_unicode_str(">i", io_stream, "Parameter")
+        write_fmt(io_stream, ">i", self.bitmap_width)
+        write_fmt(io_stream, ">i", self.bitmap_height)
+        write_fmt(io_stream, ">i", self.block_grid_width)
+        write_fmt(io_stream, ">i", self.block_grid_height)
+
+        self.packing_attributes.write(io_stream)
+        param_section_size = io_stream.tell() - param_offset
+
+        init_color_offset = io_stream.tell()
+        write_csp_unicode_str(">i", io_stream, "InitColor")
+        write_fmt(io_stream, ">i", 20)
+        write_fmt(io_stream, ">i", self.default_fill_color)
+        write_fmt(io_stream, ">i", 0)
+        write_fmt(io_stream, ">i", len(self.other_init_colors))
+        write_fmt(io_stream, ">i", 4)
+
+        for col in self.other_init_colors:
+            write_fmt(io_stream, ">i", col)
+
+        init_color_size = io_stream.tell() - init_color_offset
+
+        block_size_offset = io_stream.tell()
+        write_csp_unicode_str(">i", io_stream, "BlockSize")
+        write_fmt(io_stream, ">i", 12)
+        write_fmt(io_stream, ">i", len(self.block_sizes))
+        write_fmt(io_stream, ">i", 4)
+
+        for size in self.block_sizes:
+            write_fmt(io_stream, ">i", size)
+
+        total_size = io_stream.tell()
+        block_size = total_size - block_size_offset
+
+        io_stream.seek(0)
+
+        write_fmt(io_stream, ">i", 0x10)
+        write_fmt(io_stream, ">i", param_section_size)
+        write_fmt(io_stream, ">i", init_color_size)
+        write_fmt(io_stream, ">i", block_size)
+
+    def tobytes(self):
+        byte_arr = io.BytesIO()
+        self.write(byte_arr)
+        return byte_arr.getbuffer().tobytes()
+
+    @classmethod
+    def read(cls, io_stream):
+
+        if not isinstance(io_stream, io.BytesIO):
+            io_stream = io.BytesIO(io_stream)
+
+        header_size = read_fmt(">i", io_stream)
+        parameter_section_size = read_fmt(">i", io_stream)
+        init_color_section_size = read_fmt(">i", io_stream)
+        block_size_section_size = read_fmt(">i", io_stream)
+
+        assert read_csp_unicode_str(">i", io_stream) == "Parameter"
+
+        bitmap_width = read_fmt(">i", io_stream)
+        bitmap_height = read_fmt(">i", io_stream)
+        block_grid_width = read_fmt(">i", io_stream)
+        block_grid_height = read_fmt(">i", io_stream)
+
+        packing_attributes = PixelPackingAttribute.read(io_stream)
+
+        assert read_csp_unicode_str(">i", io_stream) == "InitColor"
+
+        u2 = read_fmt(">i", io_stream)
+        assert u2 == 20, u2
+
+        default_fill_color = read_fmt(">i", io_stream)
+        u3 = read_fmt(">i", io_stream)
+        #assert u3 == -1, u3
+
+        other_init_colors_count = read_fmt(">i", io_stream) # ?
+
+        u5 = read_fmt(">i", io_stream)
+        assert u5 == 4, u5
+
+        other_init_colors = []
+        for _ in range(other_init_colors_count):
+            other_init_colors.append(read_fmt(">i", io_stream))
+
+        assert read_csp_unicode_str(">i", io_stream) == "BlockSize"
+
+        u6 = read_fmt(">i", io_stream)
+        assert u6 == 12, u6
+
+        block_count = read_fmt(">i", io_stream)
+
+        u7 = read_fmt(">i", io_stream)
+        assert u7 == 4, u7
+
+        blocks_sizes = [read_fmt(">i", io_stream) for _i in range(block_count)]
+
+        return cls(
+            bitmap_width,
+            bitmap_height,
+            block_grid_width,
+            block_grid_height,
+            packing_attributes,
+            default_fill_color,
+            other_init_colors,
+            blocks_sizes
+        )
+
+    @classmethod
+    def new(cls, width, height, color_mode):
+
+        block_number = ((width // 256) + 1) * ((height // 256) + 1)
+
+        return cls(
+            bitmap_width = width,
+            bitmap_height = height,
+            block_grid_width = (width // 256) + 1,
+            block_grid_height = (height // 256) + 1,
+            packing_attributes = PixelPackingAttribute.new(color_mode),
+            default_fill_color = 0,
+            other_init_colors = [],
+            block_sizes = [104 for _ in range(block_number)]
         )

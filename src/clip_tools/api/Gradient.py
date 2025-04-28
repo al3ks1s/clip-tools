@@ -1,7 +1,7 @@
 from attrs import define
 from clip_tools.constants import GradientRepeatMode, GradientShape
 from clip_tools.data_classes import Position, Color, ColorStop, CurvePoint, CurveList
-from clip_tools.utils import read_fmt, write_fmt, read_csp_unicode_str
+from clip_tools.utils import read_fmt, write_fmt, read_csp_unicode_str, write_csp_unicode_str
 import io
 
 from collections import namedtuple
@@ -36,7 +36,68 @@ class Gradient():
         self.color_stops.clear()
 
     def to_bytes(self):
-        pass
+
+        gradient_data = io.BytesIO()
+
+        write_fmt(gradient_data, ">i", 0)
+        write_fmt(gradient_data, ">i", 2)
+
+        # Gradation Data
+        write_csp_unicode_str(">i", gradient_data, "GradationData")
+
+        gradation_size_offset = gradient_data.tell()
+        write_fmt(gradient_data, ">i", 0)
+
+        write_fmt(gradient_data, ">i", 16)
+        write_fmt(gradient_data, ">i", 28)
+        write_fmt(gradient_data, ">i", len(self.color_stops))
+
+        write_fmt(gradient_data, ">i", 16)
+
+        for color_stop in self.color_stops:
+            color_stop.color.write(gradient_data)
+
+            write_fmt(gradient_data, ">I", color_stop.opacity << 24)
+            write_fmt(gradient_data, ">i", int(color_stop.is_current_color))
+            write_fmt(gradient_data, ">i", ((color_stop.position * 32768) // 100) + 100) # +100 is offset for rounding for a scale over 100 instead of 256
+            write_fmt(gradient_data, ">i", color_stop.curve_points.point_count)
+
+        for color_stop in self.color_stops:
+            if color_stop.curve_points.point_count != 0:
+                for point in color_stop.curve_points.points:
+                    point.write(gradient_data, ">d")
+
+        gradation_size = gradient_data.tell() - gradation_size_offset - 4
+
+        # Gradient setting
+        write_csp_unicode_str(">i", gradient_data, "GradationSetting")
+
+        write_fmt(gradient_data, ">i", self.repeat_mode)
+        write_fmt(gradient_data, ">i", self.shape)
+        write_fmt(gradient_data, ">i", int(self.anti_aliasing))
+        write_fmt(gradient_data, ">d", self.diameter)
+        write_fmt(gradient_data, ">d", self.ellipse_diameter)
+        write_fmt(gradient_data, ">d", self.rotation_angle)
+        self.start.write(gradient_data)
+        self.end.write(gradient_data)
+
+        # Flat gradient
+        write_csp_unicode_str(">i", gradient_data, "GradationSettingAdd0001")
+        write_fmt(gradient_data, ">i", 0x14)
+
+        write_fmt(gradient_data, ">i", int(self.is_flat))
+        self.fill_color.write(gradient_data)
+        write_fmt(gradient_data, ">i", 1)
+
+        # Sizes
+        total_size = gradient_data.tell()
+        gradient_data.seek(0)
+        write_fmt(gradient_data, ">i", total_size)
+
+        gradient_data.seek(gradation_size_offset)
+        write_fmt(gradient_data, ">i", gradation_size)
+
+        return gradient_data.getbuffer().tobytes()
 
     @classmethod
     def from_bytes(cls, gradation_fill_info):
@@ -64,7 +125,7 @@ class Gradient():
 
                 num_color_stop = read_fmt(">i", gradient_data)
                 unk4 = read_fmt(">i", gradient_data)
-                assert unk4 == 16
+                assert unk4 == 16, unk4
 
                 color_stops = []
 
@@ -142,9 +203,8 @@ class Gradient():
         # Change by class.new()
         stops = [
             ColorStop(Color(0,0,0), 255, 0, 0, 0, CurveList.new()),
-            ColorStop(Color(255, 255, 255), 255, 0, 0, 0, CurveList.new())
+            ColorStop(Color(255, 255, 255), 255, 0, 100, 0, CurveList.new())
         ]
-
 
         return cls(
             stops,

@@ -2,13 +2,13 @@
 
 from attrs import define
 from clip_tools.clip.ClipData import RulerParallel, RulerCurveParallel, RulerMultiCurve, RulerEmit, RulerCurveEmit, RulerConcentricCircle, RulerGuide, RulerVanishPoint, RulerPerspective, RulerSymmetry
-from clip_tools.clip.ClipStudioFile import ClipStudioFile
+from clip_tools.data_classes import RulerCurvePoint
 import logging
 from clip_tools.data_classes import Position
 import importlib
 import io
 from clip_tools.utils import read_fmt, read_csp_unicode_str
-from clip_tools.parsers import parse_point_data, parse_vector
+from clip_tools.api.Vector import VectorList
 
 logger = logging.getLogger(__name__)
 
@@ -33,9 +33,9 @@ class Rulers():
         if layer._data.RulerVectorIndex is not None and layer._data.RulerVectorIndex > 0:
 
             ext_vector_ref = layer.clip_file.sql_database.get_table("VectorObjectList")[layer._data.RulerVectorIndex].VectorData
-            vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_datas.data
+            vector_blob = layer.clip_file.data_chunks[ext_vector_ref].block_data.data
 
-            vectors = parse_vector(vector_blob)
+            vectors = VectorList.read(vector_blob)
             rulers.append(VectorRuler(layer, vectors))
 
         if layer._data.SpecialRulerManager is not None and layer._data.SpecialRulerManager > 0:
@@ -499,3 +499,24 @@ class VectorRuler(BaseRuler):
     def __init__(self, layer, vectors):
         self.layer = layer
         self.vectors = vectors
+
+
+def parse_point_data(point_data):
+    points_bytes = io.BytesIO(point_data)
+
+    points = []
+
+    header_size = read_fmt(">i", points_bytes)
+    point_count = read_fmt(">i", points_bytes)
+    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
+    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
+    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
+    logger.debug("Unknown param for point data : %d" % read_fmt(">i", points_bytes))
+
+    for _ in range(point_count):
+        pos = Position.read(points_bytes)
+        thickness = read_fmt(">i", points_bytes)
+
+        points.append(RulerCurvePoint(pos, thickness))
+
+    return points
